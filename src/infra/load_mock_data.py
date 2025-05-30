@@ -1,3 +1,4 @@
+# Do not run this, its being tested!
 import json
 import duckdb
 

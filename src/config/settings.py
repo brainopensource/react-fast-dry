@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     
     # Export paths
     WELLS_EXPORT_PATH: Path = TEMP_DIR / "wells_prod.csv"
+    # Mocked response path
+    MOCKED_RESPONSE_PATH: Path = APP_DIR / "external" / "mocked_response.json"
     
     class Config:
         env_prefix = "APP_"

@@ -1,15 +1,16 @@
 -- name: init
 CREATE TABLE IF NOT EXISTS wells_production (
-    well_code TEXT,
-    well_name TEXT,
-    field_code TEXT,
+    field_code INTEGER,
     field_name TEXT,
-    prod_oil_kbd DOUBLE,
-    prod_gas_mcf DOUBLE,
-    prod_water_kbd DOUBLE,
-    production_period DATE,
+    well_code INTEGER,
+    well_reference TEXT,
+    well_name TEXT,
+    production_period TEXT, -- ISO string, can be changed to TIMESTAMP if needed
     days_on_production INTEGER,
+    oil_production_kbd DOUBLE,
+    gas_production_mmcfd DOUBLE,
     liquids_production_kbd DOUBLE,
+    water_production_kbd DOUBLE,
     data_source TEXT,
     source_data TEXT,
     partition_0 TEXT

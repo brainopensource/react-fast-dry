@@ -5,15 +5,21 @@ import httpx
 from typing import Dict, Any, Optional
 from ..domain.models import ODataResponse, WellProductionExternal
 from datetime import datetime
+from pathlib import Path
+from ..config.settings import get_settings
 
 
 class ExternalApiService:
     """Service for handling external OData API calls with mocking capability"""
     
-    def __init__(self, mock_mode: bool = True, mock_file_path: str = "external/mocked_response.json", 
+    def __init__(self, mock_mode: bool = True, mock_file_path: Optional[str] = None, 
                  base_url: Optional[str] = None, timeout: int = 30):
         self.mock_mode = mock_mode
-        self.mock_file_path = mock_file_path
+        # Use settings for default mock file path, always resolve to absolute Path
+        if mock_file_path is None:
+            self.mock_file_path = get_settings().MOCKED_RESPONSE_PATH
+        else:
+            self.mock_file_path = Path(mock_file_path).resolve()
         self.base_url = base_url
         self.timeout = timeout
 
@@ -49,7 +55,6 @@ class ExternalApiService:
         try:
             with open(self.mock_file_path, 'r', encoding='utf-8') as f:
                 mock_data = json.load(f)
-            
             return {
                 "status_code": 200,
                 "data": mock_data
