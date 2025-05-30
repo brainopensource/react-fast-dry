@@ -3,16 +3,6 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional
 
-class WellProduction(BaseModel):
-    well_code: str
-    well_name: str
-    field_code: str
-    field_name: str
-    prod_oil_kbd: float
-    prod_gas_mcf: float
-    prod_water_kbd: float
-    production_period: datetime
-
 class WellProductionExternal(BaseModel):
     """Model for external OData API response"""
     field_code: int
