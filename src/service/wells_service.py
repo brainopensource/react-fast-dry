@@ -1,13 +1,14 @@
 ### service/wells_service.py
 from ..domain.ports import WellRepoPort
-from ..domain.models import WellProduction
+from ..domain.models import WellProductionExternal
+
 
 class WellService:
     def __init__(self, repo: WellRepoPort):
         self.repo = repo
 
-    def insert(self, records: list[WellProduction]):
-        self.repo.insert_many([r.dict() for r in records])
+    def insert(self, records: list[WellProductionExternal]):
+        self.repo.insert_many([r.model_dump() for r in records])
 
     def search(self, name: str):
         return self.repo.search_by_name(name)

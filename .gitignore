@@ -31,6 +31,9 @@ MANIFEST
 data/db.duckdb
 external/mocked_response.json
 
+# Temporary files
+temp/*.csv
+
 # Environment
 .env
 .venv
