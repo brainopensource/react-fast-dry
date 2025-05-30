@@ -4,6 +4,7 @@ import pandas as pd
 from ..utils.sql_loader import load_sql
 from ..domain.ports import WellRepoPort
 
+
 class DuckDBWellRepo(WellRepoPort):
     def __init__(self, db_path: str, sql_path: str):
         self.db_path = db_path
