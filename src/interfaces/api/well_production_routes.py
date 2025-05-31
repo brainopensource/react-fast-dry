@@ -11,8 +11,17 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import FileResponse
 
-from ...application.services.well_production_service import WellProductionService
-from ...shared.dependencies import get_well_production_service
+# Updated service imports
+from ...application.services.well_production_import_service import WellProductionImportService
+from ...application.services.well_production_query_service import WellProductionQueryService
+# from ...application.services.well_production_service import WellProductionService as DataQualityService # Only if a route uses DataQualityService
+
+# Updated dependency imports
+from ...shared.dependencies import (
+    provide_well_production_import_service,
+    provide_well_production_query_service,
+    # provide_well_production_data_quality_service # Only if a route uses DataQualityService
+)
 from ...shared.exceptions import ApplicationException, ValidationException
 from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
 
@@ -31,7 +40,7 @@ async def get_request_id(request: Request) -> str:
 async def import_well_production(
     request: Request,
     filters: Optional[dict] = None,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionImportService = Depends(provide_well_production_import_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -119,7 +128,7 @@ async def import_well_production(
 @router.get("/import/trigger", status_code=status.HTTP_200_OK, response_model=SuccessResponse)
 async def trigger_import_well_production(
     request: Request,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionImportService = Depends(provide_well_production_import_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -223,7 +232,7 @@ async def trigger_import_well_production(
 )
 async def download_well_production(
     request: Request,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated, assuming QueryService provides repository access
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -272,7 +281,7 @@ async def download_well_production(
 @router.get("/stats", response_model=SuccessResponse)
 async def get_well_production_stats(
     request: Request,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """Get comprehensive statistics about the well production data."""
@@ -310,7 +319,7 @@ async def get_well_by_code(
     request: Request,
     period_start: Optional[str] = None,
     period_end: Optional[str] = None,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """Get well production data by well code with optional date filtering."""
@@ -414,7 +423,7 @@ async def get_wells_by_field(
     field_code: int,
     request: Request,
     limit: Optional[int] = None,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """Get all wells for a specific field with optional limit."""
