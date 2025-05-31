@@ -6,6 +6,7 @@ import asyncio
 import gc
 import logging
 import uuid
+import inspect # Added
 from typing import List, TypeVar, Callable, Optional, Dict, Any, AsyncGenerator
 from dataclasses import dataclass
 from datetime import datetime
@@ -261,34 +262,60 @@ class BatchProcessor:
                             )
                     
                     # Process the batch
-                    result = await asyncio.get_event_loop().run_in_executor(
-                        None, processor, batch
-                    )
+                    # result = await asyncio.get_event_loop().run_in_executor(
+                    #     None, processor, batch
+                    # ) # Original line
+
+                    processed_in_batch: Any
+                    if inspect.iscoroutinefunction(processor):
+                        processed_in_batch = await processor(batch)
+                    else:
+                        # Running synchronous processor directly.
+                        # If 'processor' is CPU-bound and long-running,
+                        # this will block the event loop.
+                        # Consider run_in_executor for such cases if true parallelism is needed.
+                        processed_in_batch = processor(batch)
+
+                    # Assuming processor returns the number of successfully processed items if it's an int,
+                    # otherwise assume all items in the batch were processed successfully.
+                    successfully_processed_count = processed_in_batch if isinstance(processed_in_batch, int) else len(batch)
+                    metrics.processed_items += successfully_processed_count
                     
-                    metrics.processed_items += len(batch)
-                    logger.debug(f"Processed batch {batch_index} with {len(batch)} items")
+                    logger.debug(f"Processed batch {batch_index} with {successfully_processed_count}/{len(batch)} items (reported/total)")
                     
+                    # If processed_in_batch is an int and less than len(batch), it implies partial success.
+                    # The current error handling below is for the entire batch failing.
+                    # For partial success, individual item error handling within the processor would be needed.
+                    # This implementation follows the provided snippet's structure.
+
                     # Garbage collection if needed
                     if (self.config.enable_memory_monitoring and 
                         self.memory_monitor.check_memory_threshold(self.config.gc_threshold_mb)):
                         self.memory_monitor.force_garbage_collection()
                     
-                    return result
+                    return processed_in_batch # Return the actual result from the processor
                     
                 except Exception as e:
                     attempt_msg = f"Batch {batch_index} attempt {attempt + 1}/{self.config.retry_attempts}"
-                    logger.warning(f"{attempt_msg} failed: {str(e)}")
+                    logger.error(f"{attempt_msg} failed: {str(e)}", exc_info=True) # Changed to logger.error and added exc_info=True
                     
                     if attempt == self.config.retry_attempts - 1:
                         # Final attempt failed
-                        metrics.failed_items += len(batch)
+                        metrics.failed_items += len(batch) # All items in batch are marked as failed
                         error_detail = ErrorDetail(
                             error_code="BATCH_PROCESSING_ERROR",
-                            message=f"Batch {batch_index} failed after {self.config.retry_attempts} attempts: {str(e)}",
-                            context={"batch_index": batch_index, "batch_size": len(batch)}
+                            message=f"Batch {batch_index} (items {metrics.processed_items + 1}-{metrics.processed_items + len(batch)}) failed after {self.config.retry_attempts} attempts: {str(e)}",
+                            context={"batch_index": batch_index, "batch_size": len(batch), "error": str(e)}
                         )
                         metrics.errors.append(error_detail)
-                        raise e
+                        # The original code re-raised 'e'. The snippet implies continuing.
+                        # For now, re-raising to keep closer to original behavior within _process_single_batch.
+                        # The decision to continue or halt is better managed in process_async or by the caller.
+                        raise BatchProcessingException( # Wrapping in BatchProcessingException for consistency
+                            message=f"Batch {batch_index} failed processing: {str(e)}",
+                            batch_id=metrics.batch_id, # Add batch_id for context
+                            cause=e
+                        )
                     else:
                         # Wait before retry
                         await asyncio.sleep(self.config.retry_delay_seconds * (attempt + 1))
