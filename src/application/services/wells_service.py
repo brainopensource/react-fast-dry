@@ -1,6 +1,6 @@
 ### service/wells_service.py
-from ..domain.ports import WellRepoPort
-from ..domain.models import WellProductionExternal
+from ...domain.repositories.ports import WellRepoPort
+from ...domain.models import WellProductionExternal
 
 
 class WellService:
