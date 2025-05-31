@@ -11,11 +11,12 @@ from .duckdb_well_production_repository import DuckDBWellProductionRepository
 class CompositeWellProductionRepository(WellProductionRepository):
     """Composite repository that handles both CSV and DuckDB storage."""
     
-    def __init__(self, data_dir: Path = Path("data")):
+    def __init__(self, data_dir: Path = Path("data"), duckdb_filename: str = "wells_production.duckdb", csv_filename: str = "wells_prod.csv"):
         self.data_dir = data_dir
-        self.data_dir.mkdir(exist_ok=True)
-        self.csv_path = self.data_dir / "wells_prod.csv"
-        self.duckdb_repo = DuckDBWellProductionRepository(data_dir / "wells_production.duckdb")
+        self.data_dir.mkdir(parents=True, exist_ok=True) # Ensure parent dirs are created
+        self.csv_path = self.data_dir / csv_filename
+        # Ensure DuckDBWellProductionRepository receives the full path to the database file
+        self.duckdb_repo = DuckDBWellProductionRepository(db_path = self.data_dir / duckdb_filename)
     
     async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code from DuckDB (faster for queries)."""

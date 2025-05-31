@@ -7,6 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+# Import settings and dependency configuration
+from src.shared.config.settings import get_settings
+from src.shared.dependencies import configure_dependencies
+
 # Import API routes from the interfaces layer
 from .interfaces.api.well_production_routes import router as well_production_router
 
@@ -28,6 +32,26 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan management."""
     logger.info("Starting Well Production API...")
+    settings = get_settings()
+
+    app_config = {
+        "external_api": {
+            "base_url": settings.API_BASE_URL,
+            "api_key": settings.API_KEY,
+            "mock_mode": settings.ENV != "production", # Example: mock_mode is False if ENV is production
+            "mock_file_path": str(settings.MOCKED_RESPONSE_PATH),
+            "timeout_seconds": 30, # Or make these configurable too
+            "max_retries": 3,
+            "retry_delay_seconds": 1.0
+        },
+        "repository_paths": { # Add a new section for repository paths
+            "data_dir": str(settings.DATA_ROOT_DIR),
+            "duckdb_filename": settings.DUCKDB_FILENAME,
+            "csv_filename": settings.CSV_EXPORT_FILENAME
+        },
+        # Add other configurations like batch_processing if needed
+    }
+    configure_dependencies(config=app_config)
     yield
     logger.info("Shutting down Well Production API...")
 
@@ -38,13 +62,16 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Fetch settings for CORS configuration
+settings = get_settings()
+
 # Configure CORS for production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=settings.CORS_ALLOWED_ORIGINS, # Use configured origins
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"], # Consider making this configurable too if needed
+    allow_headers=["*"], # Consider making this configurable too if needed
 )
 
 # Include API routes

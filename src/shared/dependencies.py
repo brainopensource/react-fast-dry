@@ -4,7 +4,8 @@ Eliminates tight coupling between layers and enables easy testing.
 """
 from typing import Optional, Dict, Any
 from functools import lru_cache
-from fastapi import Depends # Added
+from fastapi import Depends
+from pathlib import Path # Added for Path object usage
 
 from ..domain.repositories.well_production_repository import WellProductionRepository as WellProductionRepositoryPort
 # Renamed WellProductionRepository to WellProductionRepositoryPort for clarity if it's a port/interface
@@ -66,18 +67,33 @@ class DependencyContainer:
     def get_repository(self) -> WellProductionRepositoryPort: # Renamed for clarity
         """Get the well production repository instance"""
         if 'repository' not in self._instances:
-            # In a real app, this might also take config (e.g., db connection string)
-            self._instances['repository'] = CompositeWellProductionRepository()
+            repo_paths_config = self._config.get('repository_paths', {})
+            data_dir = Path(repo_paths_config.get('data_dir', 'data')) # Default to 'data' if not configured
+            duckdb_filename = repo_paths_config.get('duckdb_filename', 'wells_production.duckdb')
+            csv_filename = repo_paths_config.get('csv_filename', 'wells_prod.csv')
+
+            # Pass configured paths to CompositeWellProductionRepository
+            # This requires CompositeWellProductionRepository to accept these as args.
+            self._instances['repository'] = CompositeWellProductionRepository(
+                data_dir=data_dir,
+                duckdb_filename=duckdb_filename, # Add this param
+                csv_filename=csv_filename # Add this param
+            )
         return self._instances['repository']
     
     def get_external_api_adapter(self) -> ExternalApiPort: # Renamed for clarity
         """Get the external API adapter instance"""
         if 'external_api_adapter' not in self._instances:
             api_config = self._config.get('external_api', {})
+            # Ensuring mock_mode has a production-sensible default if not set by app_config
+            # This requires settings to be accessible, or pass ENV through config
+            # For now, relying on main.py to set it based on settings.ENV
+            mock_mode_default = self._config.get('env', 'development') != "production"
+
             self._instances['external_api_adapter'] = ExternalApiAdapter(
                 base_url=api_config.get('base_url'),
                 api_key=api_config.get('api_key'),
-                mock_mode=api_config.get('mock_mode', True),
+                mock_mode=api_config.get('mock_mode', mock_mode_default), # Use resolved default
                 mock_file_path=api_config.get('mock_file_path'),
                 timeout_seconds=api_config.get('timeout_seconds', 30),
                 max_retries=api_config.get('max_retries', 3),
