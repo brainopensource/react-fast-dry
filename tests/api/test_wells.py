@@ -3,6 +3,32 @@ Tests for well production endpoints.
 """
 
 import pytest
+from unittest.mock import AsyncMock
+from typing import Optional # Added for Optional type hint
+
+from fastapi import status
+# Assuming TestClient is globally available or via a fixture like test_client
+# from fastapi.testclient import TestClient
+
+# This import is crucial for app.dependency_overrides
+from src.main import app
+
+from src.shared.exceptions import ApplicationException, ValidationException, ErrorCode
+from src.application.services.well_production_service import WellProductionService
+
+# Helper function for asserting error response structure
+def assert_error_response_structure(response_json: dict, expected_error_code: ErrorCode, expected_message: Optional[str] = None):
+    assert response_json["success"] is False
+    assert "error" in response_json
+    error_detail = response_json["error"]
+    assert error_detail["error_code"] == expected_error_code.value
+    if expected_message:
+        assert expected_message in error_detail["message"]
+    else:
+        assert "message" in error_detail # Just ensure message key exists
+    assert "context" in error_detail # Ensure context key exists, even if empty
+    assert "metadata" in response_json
+    assert "timestamp" in response_json["metadata"]
 
 
 class TestWellEndpoints:
@@ -164,6 +190,196 @@ class TestWellEndpoints:
         
         else:
             pytest.fail(f"Unexpected status code for download: {response.status_code}")
+
+    # --- New tests for standardized error handling ---
+
+    def test_get_well_by_code_not_found(
+        self, test_client, api_endpoints, sample_well_code # Assuming test_client and sample_well_code are fixtures
+    ):
+        """Test GET /well/{well_code} with ValidationException (404) for well not found."""
+        # sample_well_code is used from fixture, e.g. 12345
+        # api_endpoints is used from fixture
+
+        mock_service_instance = AsyncMock(spec=WellProductionService)
+        error_message = f"Well with code {sample_well_code} not found"
+
+        # Configure the mock service method to raise the specific exception
+        mock_service_instance.get_production_by_well.side_effect = ValidationException(
+            message=error_message,
+            field="well_code",
+            value=sample_well_code, # The value that was not found
+            status_code_override=status.HTTP_404_NOT_FOUND
+        )
+
+        # Override the dependency for this test
+        # Ensure 'app' is the actual FastAPI application instance
+        original_override = app.dependency_overrides.get(WellProductionService)
+        app.dependency_overrides[WellProductionService] = lambda: mock_service_instance
+
+        response = test_client.get(f"{api_endpoints['well']}/{sample_well_code}")
+
+        try:
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            response_json = response.json()
+            assert_error_response_structure(response_json, ErrorCode.NOT_FOUND_ERROR, error_message)
+        finally:
+            # Restore original dependency override or remove the current one
+            if original_override:
+                app.dependency_overrides[WellProductionService] = original_override
+            else:
+                app.dependency_overrides.pop(WellProductionService, None)
+
+    def test_get_well_by_code_validation_error_invalid_date(
+        self, test_client, api_endpoints, sample_well_code # Assuming fixtures are available
+    ):
+        """Test GET /well/{well_code} with ValidationException (400) for invalid date format."""
+        mock_service_instance = AsyncMock(spec=WellProductionService)
+        error_message = "Invalid period_start format. Use ISO format (YYYY-MM-DD)"
+
+        # This exception should default to HTTP 400 Bad Request
+        mock_service_instance.get_production_by_well.side_effect = ValidationException(
+            message=error_message,
+            field="period_start",
+            value="invalid-date-format"
+            # No status_code_override, so it uses ValidationException's default (400)
+        )
+
+        original_override = app.dependency_overrides.get(WellProductionService)
+        app.dependency_overrides[WellProductionService] = lambda: mock_service_instance
+
+        # Make a request that would trigger this validation, e.g., by passing an invalid date query param
+        response = test_client.get(f"{api_endpoints['well']}/{sample_well_code}?period_start=invalid-date-format")
+
+        try:
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            response_json = response.json()
+            assert_error_response_structure(response_json, ErrorCode.VALIDATION_ERROR, error_message)
+        finally:
+            if original_override:
+                app.dependency_overrides[WellProductionService] = original_override
+            else:
+                app.dependency_overrides.pop(WellProductionService, None)
+
+    def test_get_field_by_code_not_found(
+        self, test_client, api_endpoints, sample_field_code # Assuming fixtures
+    ):
+        """Test GET /field/{field_code} with ValidationException (404) for field not found."""
+        mock_service_instance = AsyncMock(spec=WellProductionService)
+        error_message = f"No wells found for field code {sample_field_code}"
+
+        mock_service_instance.get_production_by_field.side_effect = ValidationException(
+            message=error_message,
+            field="field_code",
+            value=sample_field_code,
+            status_code_override=status.HTTP_404_NOT_FOUND
+        )
+
+        original_override = app.dependency_overrides.get(WellProductionService)
+        app.dependency_overrides[WellProductionService] = lambda: mock_service_instance
+
+        response = test_client.get(f"{api_endpoints['field']}/{sample_field_code}")
+
+        try:
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            response_json = response.json()
+            assert_error_response_structure(response_json, ErrorCode.NOT_FOUND_ERROR, error_message)
+        finally:
+            if original_override:
+                app.dependency_overrides[WellProductionService] = original_override
+            else:
+                app.dependency_overrides.pop(WellProductionService, None)
+
+    def test_download_no_data_not_found(
+        self, test_client, api_endpoints # Assuming fixtures
+    ):
+        """Test GET /download with ValidationException (404) for no data."""
+        mock_service_instance = AsyncMock(spec=WellProductionService)
+        error_message = "No well production data available for download"
+
+        # The exception is raised from repository.export_to_csv()
+        # The service's download_well_production method calls service.repository.export_to_csv()
+        mock_repository = AsyncMock() # Mock the repository object
+        mock_repository.export_to_csv.side_effect = ValidationException(
+            message=error_message,
+            field="csv_export", # Field name as in the original exception
+            status_code_override=status.HTTP_404_NOT_FOUND
+        )
+        # Attach the mocked repository to the mocked service instance
+        # This assumes the service has an attribute 'repository' that holds the repo instance
+        mock_service_instance.repository = mock_repository
+
+        original_override = app.dependency_overrides.get(WellProductionService)
+        app.dependency_overrides[WellProductionService] = lambda: mock_service_instance
+
+        response = test_client.get(api_endpoints["download"])
+
+        try:
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            response_json = response.json()
+            assert_error_response_structure(response_json, ErrorCode.NOT_FOUND_ERROR, error_message)
+        finally:
+            if original_override:
+                app.dependency_overrides[WellProductionService] = original_override
+            else:
+                app.dependency_overrides.pop(WellProductionService, None)
+
+    def test_download_generic_application_exception(
+        self, test_client, api_endpoints # Assuming fixtures
+    ):
+        """Test GET /download with a generic ApplicationException (500)."""
+        mock_service_instance = AsyncMock(spec=WellProductionService)
+        error_message = "A simulated internal error occurred during download"
+
+        mock_repository = AsyncMock()
+        mock_repository.export_to_csv.side_effect = ApplicationException(
+            message=error_message,
+            error_code=ErrorCode.INTERNAL_ERROR
+            # http_status_code defaults to 500 in ApplicationException
+        )
+        mock_service_instance.repository = mock_repository
+
+        original_override = app.dependency_overrides.get(WellProductionService)
+        app.dependency_overrides[WellProductionService] = lambda: mock_service_instance
+
+        response = test_client.get(api_endpoints["download"])
+
+        try:
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            response_json = response.json()
+            assert_error_response_structure(response_json, ErrorCode.INTERNAL_ERROR, error_message)
+        finally:
+            if original_override:
+                app.dependency_overrides[WellProductionService] = original_override
+            else:
+                app.dependency_overrides.pop(WellProductionService, None)
+
+    def test_get_stats_generic_application_exception(
+        self, test_client, api_endpoints # Assuming fixtures
+    ):
+        """Test GET /stats with a generic ApplicationException (500)."""
+        mock_service_instance = AsyncMock(spec=WellProductionService)
+        error_message = "Simulated service layer error for stats"
+
+        mock_service_instance.get_production_statistics.side_effect = ApplicationException(
+            message=error_message,
+            error_code=ErrorCode.USE_CASE_ERROR # Example specific error code
+            # http_status_code defaults to 500 in ApplicationException
+        )
+
+        original_override = app.dependency_overrides.get(WellProductionService)
+        app.dependency_overrides[WellProductionService] = lambda: mock_service_instance
+
+        response = test_client.get(api_endpoints["stats"])
+
+        try:
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            response_json = response.json()
+            assert_error_response_structure(response_json, ErrorCode.USE_CASE_ERROR, error_message)
+        finally:
+            if original_override:
+                app.dependency_overrides[WellProductionService] = original_override
+            else:
+                app.dependency_overrides.pop(WellProductionService, None)
 
 
 class TestWellEndpointsIntegration:
