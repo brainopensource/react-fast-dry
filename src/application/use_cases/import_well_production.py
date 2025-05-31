@@ -50,13 +50,14 @@ class ImportWellProductionUseCase:
             well_productions.append(well)
         
         # Use bulk insert for better performance
-        imported_wells = await self.repository.bulk_insert(well_productions)
+        imported_wells, new_count, duplicate_count = await self.repository.bulk_insert(well_productions)
         
         # Get final count for statistics
         total_count = await self.repository.count()
         
         return {
-            "imported_count": len(imported_wells),
+            "imported_count": new_count,
+            "duplicate_count": duplicate_count,
             "total_records": total_count,
-            "message": f"Successfully imported {len(imported_wells)} wells. Total records: {total_count}"
+            "message": f"Successfully imported {new_count} new wells, skipped {duplicate_count} duplicates. Total records: {total_count}"
         } 

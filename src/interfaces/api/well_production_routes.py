@@ -57,26 +57,44 @@ async def import_well_production(
         
         execution_time_ms = (time.time() - start_time) * 1000
         
+        # Extract metadata for enhanced messaging
+        metadata = result.metadata or {}
+        new_records = metadata.get('new_records', result.processed_items)
+        duplicate_records = metadata.get('duplicate_records', 0)
+        data_status = metadata.get('data_status', 'unknown')
+        
+        # Create appropriate message based on import results
+        if data_status == 'no_new_data':
+            message = f"No new data to import - all {result.total_items} records already exist in the system"
+        elif new_records > 0 and duplicate_records > 0:
+            message = f"Successfully imported {new_records} new records, skipped {duplicate_records} duplicates out of {result.total_items} total records"
+        elif new_records > 0:
+            message = f"Successfully imported {new_records} out of {result.total_items} records"
+        else:
+            message = f"Import completed but no new records were added"
+        
         return ResponseBuilder.success(
             data={
                 "batch_result": result.model_dump(),
                 "import_summary": {
                     "total_records": result.total_items,
-                    "successful_records": result.processed_items,
+                    "successful_records": new_records,
                     "failed_records": result.failed_items,
+                    "duplicate_records": duplicate_records,
                     "success_rate": result.success_rate,
-                    "batch_id": batch_id
+                    "batch_id": batch_id,
+                    "data_status": data_status
                 },
                 "performance": {
                     "execution_time_ms": execution_time_ms,
                     "memory_usage_mb": result.memory_usage_mb,
                     "throughput_records_per_second": (
-                        result.processed_items / (execution_time_ms / 1000)
+                        new_records / (execution_time_ms / 1000)
                         if execution_time_ms > 0 else 0
                     )
                 }
             },
-            message=f"Successfully imported {result.processed_items} out of {result.total_items} records",
+            message=message,
             request_id=request_id,
             execution_time_ms=execution_time_ms
         )
@@ -127,26 +145,44 @@ async def trigger_import_well_production(
         
         execution_time_ms = (time.time() - start_time) * 1000
         
+        # Extract metadata for enhanced messaging
+        metadata = result.metadata or {}
+        new_records = metadata.get('new_records', result.processed_items)
+        duplicate_records = metadata.get('duplicate_records', 0)
+        data_status = metadata.get('data_status', 'unknown')
+        
+        # Create appropriate message based on import results
+        if data_status == 'no_new_data':
+            message = f"Import routine completed - all {result.total_items} records are already up-to-date in the system"
+        elif new_records > 0 and duplicate_records > 0:
+            message = f"Import routine completed: imported {new_records} new records, skipped {duplicate_records} duplicates out of {result.total_items} total records"
+        elif new_records > 0:
+            message = f"Import routine completed: successfully imported {new_records} out of {result.total_items} records"
+        else:
+            message = f"Import routine completed but no new records were added - data is already up-to-date"
+        
         return ResponseBuilder.success(
             data={
                 "batch_result": result.model_dump(),
                 "import_summary": {
                     "total_records": result.total_items,
-                    "successful_records": result.processed_items,
+                    "successful_records": new_records,
                     "failed_records": result.failed_items,
+                    "duplicate_records": duplicate_records,
                     "success_rate": result.success_rate,
-                    "batch_id": batch_id
+                    "batch_id": batch_id,
+                    "data_status": data_status
                 },
                 "performance": {
                     "execution_time_ms": execution_time_ms,
                     "memory_usage_mb": result.memory_usage_mb,
                     "throughput_records_per_second": (
-                        result.processed_items / (execution_time_ms / 1000)
+                        new_records / (execution_time_ms / 1000)
                         if execution_time_ms > 0 else 0
                     )
                 }
             },
-            message=f"Successfully imported {result.processed_items} out of {result.total_items} records",
+            message=message,
             request_id=request_id,
             execution_time_ms=execution_time_ms
         )

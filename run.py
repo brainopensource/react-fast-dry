@@ -34,14 +34,14 @@ def run_development():
     Path("logs").mkdir(exist_ok=True)
     
     print("🚀 Starting Wells Production API in DEVELOPMENT mode...")
-    print("📊 API Documentation: http://localhost:8000/docs")
-    print("🔍 Health Check: http://localhost:8000/health")
-    print("📈 Statistics: http://localhost:8000/api/v1/stats")
+    print("📊 API Documentation: http://localhost:8080/docs")
+    print("🔍 Health Check: http://localhost:8080/health")
+    print("📈 Statistics: http://localhost:8080/api/v1/wells/stats")
     
     uvicorn.run(
         "src.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8080,
         reload=True,
         reload_dirs=["src"],
         log_level="debug",

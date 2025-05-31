@@ -1,6 +1,6 @@
 import duckdb
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set, Tuple
 from datetime import datetime
 
 from ...domain.entities.well_production import WellProduction
@@ -30,15 +30,15 @@ class DuckDBWellProductionRepository(WellProductionRepository):
             # Create indexes
             conn.execute(self.queries['create_indexes'])
     
-    async def get_by_well_code(self, well_code: int) -> Optional[WellProduction]:
+    async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code."""
         with duckdb.connect(str(self.db_path)) as conn:
-            result = conn.execute(
+            results = conn.execute(
                 self.queries['get_by_well_code'],
                 [well_code]
-            ).fetchone()
+            ).fetchall()
             
-            return self._row_to_entity(result) if result else None
+            return [self._row_to_entity(row) for row in results]
     
     async def get_by_field_code(self, field_code: int) -> List[WellProduction]:
         """Get all well production data for a field."""
@@ -64,20 +64,62 @@ class DuckDBWellProductionRepository(WellProductionRepository):
         """Update well production data."""
         return await self.save(well_production)  # DuckDB handles upsert with INSERT OR REPLACE
     
-    async def bulk_insert(self, well_productions: List[WellProduction]) -> List[WellProduction]:
-        """Bulk insert well production data for better performance."""
-        if not well_productions:
-            return well_productions
-            
-        with duckdb.connect(str(self.db_path)) as conn:
-            data = [
-                self._entity_to_params(wp)
-                for wp in well_productions
-            ]
-            
-            conn.executemany(self.queries['insert_bulk'], data)
+    async def bulk_insert(self, well_productions: List[WellProduction]) -> Tuple[List[WellProduction], int, int]:
+        """
+        Bulk insert well production data with duplicate detection.
         
-        return well_productions
+        Returns:
+            Tuple of (inserted_records, new_records_count, duplicate_records_count)
+        """
+        if not well_productions:
+            return well_productions, 0, 0
+        
+        # Check for existing records to detect duplicates
+        composite_keys = [(wp.well_code, wp.field_code, wp.production_period) for wp in well_productions]
+        existing_keys = await self.get_existing_composite_keys(composite_keys)
+        
+        # Filter out duplicates
+        new_records = []
+        duplicate_count = 0
+        
+        for wp in well_productions:
+            composite_key = (wp.well_code, wp.field_code, wp.production_period)
+            if composite_key not in existing_keys:
+                new_records.append(wp)
+            else:
+                duplicate_count += 1
+        
+        # Insert only new records
+        if new_records:
+            with duckdb.connect(str(self.db_path)) as conn:
+                data = [
+                    self._entity_to_params(wp)
+                    for wp in new_records
+                ]
+                
+                conn.executemany(self.queries['insert_bulk'], data)
+        
+        return new_records, len(new_records), duplicate_count
+    
+    async def get_existing_composite_keys(self, composite_keys: List[Tuple[int, int, str]]) -> Set[Tuple[int, int, str]]:
+        """Check which composite keys already exist in the database."""
+        if not composite_keys:
+            return set()
+        
+        existing_keys = set()
+        
+        with duckdb.connect(str(self.db_path)) as conn:
+            # Check each composite key
+            for well_code, field_code, production_period in composite_keys:
+                result = conn.execute(
+                    self.queries['check_exists'],
+                    [well_code, field_code, production_period]
+                ).fetchone()
+                
+                if result and result[0] > 0:  # Record exists
+                    existing_keys.add((well_code, field_code, production_period))
+        
+        return existing_keys
     
     async def get_all(self) -> List[WellProduction]:
         """Get all well production data."""

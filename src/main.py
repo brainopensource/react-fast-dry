@@ -1,16 +1,26 @@
 ### main.py
 import logging
+import sys
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from datetime import datetime
 
-# Temporarily commenting out to test startup
+# Import API routes from the interfaces layer
 from .interfaces.api.well_production_routes import router as well_production_router
 
-# Configure logging
+# Ensure logs directory exists
+Path("logs").mkdir(exist_ok=True)
+
+# Configure logging with both console and file handlers
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("logs/wells_api.log", mode="a")
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -37,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers - temporarily disabled
+# Include API routes
 app.include_router(well_production_router)
 
 @app.get("/")
@@ -68,5 +78,5 @@ async def health_check():
         "service": "well-production-api",
         "version": "1.0.0",
         "database": "duckdb",
-        "timestamp": "2025-05-31T02:45:00Z"
+        "timestamp": datetime.now().isoformat()
     }
