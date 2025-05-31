@@ -1,7 +1,7 @@
 import csv
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple, Set
 from datetime import datetime
 
 from ...domain.entities.well_production import WellProduction
@@ -77,22 +77,58 @@ class WellProductionRepositoryImpl(WellProductionRepository):
         
         return well_production
     
-    async def bulk_insert(self, well_productions: List[WellProduction]) -> List[WellProduction]:
-        """Bulk insert well production data for better performance."""
+    async def get_existing_record_keys(self) -> Set[str]:
+        """Get a set of existing record keys for duplicate detection."""
+        if not self.csv_path.exists():
+            return set()
+            
+        existing_keys = set()
+        with open(self.csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                # Create a unique key based on well_code and production_period
+                key = f"{row['well_code']}_{row['production_period']}"
+                existing_keys.add(key)
+        return existing_keys
+    
+    async def bulk_insert(self, well_productions: List[WellProduction]) -> Tuple[List[WellProduction], int, int]:
+        """
+        Bulk insert well production data with duplicate detection.
+        
+        Returns:
+            Tuple of (inserted_records, new_records_count, duplicate_records_count)
+        """
         if not well_productions:
-            return well_productions
+            return well_productions, 0, 0
             
-        file_exists = self.csv_path.exists()
+        # Get existing record keys for duplicate detection
+        existing_keys = await self.get_existing_record_keys()
         
-        with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
-            if not file_exists:
-                writer.writeheader()
+        # Separate new records from duplicates
+        new_records = []
+        duplicate_count = 0
+        
+        for well_production in well_productions:
+            record_key = f"{well_production.well_code}_{well_production.production_period}"
+            if record_key not in existing_keys:
+                new_records.append(well_production)
+                existing_keys.add(record_key)  # Add to set to avoid duplicates within the batch
+            else:
+                duplicate_count += 1
+        
+        # Only insert new records
+        if new_records:
+            file_exists = self.csv_path.exists()
             
-            for well_production in well_productions:
-                writer.writerow(self._entity_to_row(well_production))
+            with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
+                if not file_exists:
+                    writer.writeheader()
+                
+                for well_production in new_records:
+                    writer.writerow(self._entity_to_row(well_production))
         
-        return well_productions
+        return new_records, len(new_records), duplicate_count
 
     async def get_all(self) -> List[WellProduction]:
         """Get all well production data."""

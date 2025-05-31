@@ -56,6 +56,7 @@ class BatchResult(BaseModel):
     errors: List[ErrorDetail] = []
     execution_time_ms: float
     memory_usage_mb: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class PaginatedResponse(BaseModel, Generic[T]):

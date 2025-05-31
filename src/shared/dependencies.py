@@ -60,13 +60,13 @@ class DependencyContainer:
         if 'batch_processor' not in self._instances:
             batch_config = self._config.get('batch_processing', {})
             config = BatchConfig(
-                batch_size=batch_config.get('batch_size', 1000),
-                max_memory_mb=batch_config.get('max_memory_mb', 512.0),
-                max_concurrent_batches=batch_config.get('max_concurrent_batches', 3),
+                batch_size=batch_config.get('batch_size', 10000),
+                max_memory_mb=batch_config.get('max_memory_mb', 4096.0),
+                max_concurrent_batches=batch_config.get('max_concurrent_batches', 4),
                 retry_attempts=batch_config.get('retry_attempts', 3),
-                retry_delay_seconds=batch_config.get('retry_delay_seconds', 1.0),
+                retry_delay_seconds=batch_config.get('retry_delay_seconds', 2.0),
                 enable_memory_monitoring=batch_config.get('enable_memory_monitoring', True),
-                gc_threshold_mb=batch_config.get('gc_threshold_mb', 256.0)
+                gc_threshold_mb=batch_config.get('gc_threshold_mb', 2048.0)
             )
             self._instances['batch_processor'] = BatchProcessor(config)
         return self._instances['batch_processor']

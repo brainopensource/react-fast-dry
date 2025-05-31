@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from ..entities.well_production import WellProduction
 
 class WellProductionRepository(ABC):
     """Repository interface for well production data."""
     
     @abstractmethod
-    async def get_by_well_code(self, well_code: int) -> Optional[WellProduction]:
+    async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code."""
         pass
     
@@ -26,8 +26,13 @@ class WellProductionRepository(ABC):
         pass
     
     @abstractmethod
-    async def bulk_insert(self, well_productions: List[WellProduction]) -> List[WellProduction]:
-        """Bulk insert well production data for better performance."""
+    async def bulk_insert(self, well_productions: List[WellProduction]) -> Tuple[List[WellProduction], int, int]:
+        """
+        Bulk insert well production data with duplicate detection.
+        
+        Returns:
+            Tuple of (inserted_records, new_records_count, duplicate_records_count)
+        """
         pass
     
     @abstractmethod
