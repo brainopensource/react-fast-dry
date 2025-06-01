@@ -11,10 +11,19 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import FileResponse
 
-from ...application.services.well_production_service import WellProductionService
-from ...shared.dependencies import get_well_production_service
+# Updated service imports
+from ...application.services.well_production_import_service import WellProductionImportService
+from ...application.services.well_production_query_service import WellProductionQueryService
+# from ...application.services.well_production_service import WellProductionService as DataQualityService # Only if a route uses DataQualityService
+
+# Updated dependency imports
+from ...shared.dependencies import (
+    provide_well_production_import_service,
+    provide_well_production_query_service,
+    # provide_well_production_data_quality_service # Only if a route uses DataQualityService
+)
 from ...shared.exceptions import ApplicationException, ValidationException
-from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse, ApiResponse
+from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -27,11 +36,11 @@ async def get_request_id(request: Request) -> str:
     return request.headers.get("X-Request-ID", str(uuid.uuid4()))
 
 
-@router.post("/import", status_code=status.HTTP_201_CREATED, response_model=ApiResponse)
+@router.post("/import", status_code=status.HTTP_201_CREATED, response_model=SuccessResponse)
 async def import_well_production(
     request: Request,
     filters: Optional[dict] = None,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionImportService = Depends(provide_well_production_import_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -116,10 +125,10 @@ async def import_well_production(
         return ResponseBuilder.error(error, request_id=request_id)
 
 
-@router.get("/import/trigger", status_code=status.HTTP_200_OK, response_model=ApiResponse)
+@router.get("/import/trigger", status_code=status.HTTP_200_OK, response_model=SuccessResponse)
 async def trigger_import_well_production(
     request: Request,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionImportService = Depends(provide_well_production_import_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -204,10 +213,26 @@ async def trigger_import_well_production(
         return ResponseBuilder.error(error, request_id=request_id)
 
 
-@router.get("/download", response_class=FileResponse)
+@router.get(
+    "/download",
+    responses={
+        200: {
+            "content": {"text/csv": {}},
+            "description": "Successful CSV export of well production data.",
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Data not found if no data is available for export.",
+        },
+        500: {
+            "model": ErrorResponse,
+            "description": "Internal server error if any unexpected issue occurs.",
+        },
+    }
+)
 async def download_well_production(
     request: Request,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated, assuming QueryService provides repository access
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -225,7 +250,8 @@ async def download_well_production(
         if not csv_path.exists():
             raise ValidationException(
                 message="No well production data available for download",
-                field="csv_export"
+                field="csv_export",
+                status_code_override=status.HTTP_404_NOT_FOUND
             )
         
         return FileResponse(
@@ -240,28 +266,22 @@ async def download_well_production(
         
     except ApplicationException as e:
         logger.error(f"Error in download {request_id}: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=e.to_dict()
-        )
+        # ValidationException will also be caught here
+        return ResponseBuilder.error(e, request_id=request_id)
         
     except Exception as e:
         logger.error(f"Unexpected error in download {request_id}: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error": True,
-                "error_code": "INTERNAL_ERROR",
-                "message": f"Unexpected error during download: {str(e)}",
-                "request_id": request_id
-            }
+        error = ApplicationException(
+            message=f"Unexpected error during download: {str(e)}",
+            cause=e
         )
+        return ResponseBuilder.error(error, request_id=request_id)
 
 
 @router.get("/stats", response_model=SuccessResponse)
 async def get_well_production_stats(
     request: Request,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """Get comprehensive statistics about the well production data."""
@@ -299,7 +319,7 @@ async def get_well_by_code(
     request: Request,
     period_start: Optional[str] = None,
     period_end: Optional[str] = None,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """Get well production data by well code with optional date filtering."""
@@ -342,7 +362,8 @@ async def get_well_by_code(
             raise ValidationException(
                 message=f"Well with code {well_code} not found",
                 field="well_code",
-                value=well_code
+                value=well_code,
+                status_code_override=status.HTTP_404_NOT_FOUND
             )
         
         execution_time_ms = (time.time() - start_time) * 1000
@@ -402,7 +423,7 @@ async def get_wells_by_field(
     field_code: int,
     request: Request,
     limit: Optional[int] = None,
-    service: WellProductionService = Depends(get_well_production_service),
+    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
     request_id: str = Depends(get_request_id)
 ):
     """Get all wells for a specific field with optional limit."""
@@ -420,7 +441,8 @@ async def get_wells_by_field(
             raise ValidationException(
                 message=f"No wells found for field code {field_code}",
                 field="field_code",
-                value=field_code
+                value=field_code,
+                status_code_override=status.HTTP_404_NOT_FOUND
             )
         
         execution_time_ms = (time.time() - start_time) * 1000

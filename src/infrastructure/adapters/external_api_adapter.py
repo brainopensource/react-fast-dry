@@ -12,6 +12,7 @@ from datetime import datetime
 
 from ...domain.ports.external_api_port import ExternalApiPort
 from ...domain.entities.well_production import WellProduction
+from ...shared.config.settings import get_settings # Added import
 from ...shared.exceptions import (
     ExternalApiException, 
     FileSystemException,
@@ -40,7 +41,7 @@ class ExternalApiAdapter(ExternalApiPort):
         self.base_url = base_url
         self.api_key = api_key
         self.mock_mode = mock_mode
-        self.mock_file_path = Path(mock_file_path) if mock_file_path else Path("external/mocked_response.json")
+        self.mock_file_path = Path(mock_file_path) if mock_file_path else get_settings().MOCKED_RESPONSE_PATH
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds

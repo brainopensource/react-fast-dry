@@ -4,7 +4,7 @@ Provides clear, typed exceptions with proper error context.
 """
 from typing import Optional, Dict, Any
 from enum import Enum
-
+from fastapi import status
 
 class ErrorCode(str, Enum):
     """Standardized error codes for the application"""
@@ -36,13 +36,18 @@ class ApplicationException(Exception):
         message: str, 
         error_code: ErrorCode = ErrorCode.INTERNAL_ERROR,
         context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None
+        cause: Optional[Exception] = None,
+        http_status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
     ):
         super().__init__(message)
         self.message = message
         self.error_code = error_code
         self.context = context or {}
         self.cause = cause
+        if error_code == ErrorCode.NOT_FOUND_ERROR:
+            self.http_status_code = status.HTTP_404_NOT_FOUND
+        else:
+            self.http_status_code = http_status_code
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert exception to dictionary for API responses"""
@@ -62,7 +67,7 @@ class DomainException(ApplicationException):
 class ValidationException(DomainException):
     """Data validation errors"""
     
-    def __init__(self, message: str, field: Optional[str] = None, value: Any = None):
+    def __init__(self, message: str, field: Optional[str] = None, value: Any = None, status_code_override: Optional[int] = None):
         context = {}
         if field:
             context["field"] = field
@@ -72,8 +77,12 @@ class ValidationException(DomainException):
         super().__init__(
             message=message,
             error_code=ErrorCode.VALIDATION_ERROR,
-            context=context
+            context=context,
+            http_status_code=status_code_override if status_code_override is not None else status.HTTP_400_BAD_REQUEST
         )
+        if status_code_override: # Ensure error_code reflects not_found if 404 is passed
+            if status_code_override == status.HTTP_404_NOT_FOUND:
+                self.error_code = ErrorCode.NOT_FOUND_ERROR
 
 
 class BusinessRuleViolationException(DomainException):
@@ -83,7 +92,8 @@ class BusinessRuleViolationException(DomainException):
         super().__init__(
             message=message,
             error_code=ErrorCode.BUSINESS_RULE_VIOLATION,
-            context={**(context or {}), "rule": rule}
+            context={**(context or {}), "rule": rule},
+            http_status_code=status.HTTP_400_BAD_REQUEST # Or status.HTTP_409_CONFLICT
         )
 
 
@@ -104,7 +114,8 @@ class DatabaseException(InfrastructureException):
             message=message,
             error_code=ErrorCode.DATABASE_ERROR,
             context=context,
-            cause=cause
+            cause=cause,
+            http_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -128,7 +139,9 @@ class ExternalApiException(InfrastructureException):
             message=message,
             error_code=ErrorCode.EXTERNAL_API_ERROR,
             context=context,
-            cause=cause
+            cause=cause,
+            # Defaulting to 500, but could be more specific if endpoint status_code is relayed
+            http_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -144,7 +157,8 @@ class FileSystemException(InfrastructureException):
             message=message,
             error_code=ErrorCode.FILE_SYSTEM_ERROR,
             context=context,
-            cause=cause
+            cause=cause,
+            http_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -171,7 +185,8 @@ class BatchProcessingException(ApplicationException):
             message=message,
             error_code=ErrorCode.BATCH_PROCESSING_ERROR,
             context=context,
-            cause=cause
+            cause=cause,
+            http_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
 
@@ -186,5 +201,6 @@ class MemoryException(ApplicationException):
         super().__init__(
             message=message,
             error_code=ErrorCode.MEMORY_ERROR,
-            context=context
+            context=context,
+            http_status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         ) 
