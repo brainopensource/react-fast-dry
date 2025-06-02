@@ -15,12 +15,14 @@ from fastapi.responses import FileResponse
 # Updated service imports
 from ...application.services.well_production_import_service import WellProductionImportService
 from ...application.services.well_production_query_service import WellProductionQueryService
+from ...application.services.odata_well_production_import_service import ODataWellProductionImportService
 # from ...application.services.well_production_service import WellProductionService as DataQualityService # Only if a route uses DataQualityService
 
 # Updated dependency imports
 from ...shared.dependencies import (
     provide_well_production_import_service,
     provide_well_production_query_service,
+    provide_odata_well_production_import_service,
     # provide_well_production_data_quality_service # Only if a route uses DataQualityService
 )
 from ...shared.exceptions import (
@@ -31,6 +33,7 @@ from ...shared.exceptions import (
 )
 from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
 from ...shared.job_manager import JobManager, JobStatus
+from ...shared.utils.timing_decorator import async_timed
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -47,6 +50,7 @@ async def get_request_id(request: Request) -> str:
 
 
 @router.post("/import", status_code=status.HTTP_201_CREATED, response_model=SuccessResponse)
+@async_timed
 async def import_well_production(
     request: Request,
     filters: Optional[dict] = None,
@@ -105,7 +109,7 @@ async def import_well_production(
                     "data_status": data_status
                 },
                 "performance": {
-                    "execution_time_ms": execution_time_ms,
+                    "execution_time_seconds": execution_time_ms / 1000,
                     "memory_usage_mb": result.memory_usage_mb,
                     "throughput_records_per_second": (
                         new_records / (execution_time_ms / 1000)
@@ -115,7 +119,7 @@ async def import_well_production(
             },
             message=message,
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ValidationException as e:
@@ -205,15 +209,56 @@ async def run_import(job_id: str, service: WellProductionImportService):
         )
 
 @router.get("/import/status/{job_id}", status_code=status.HTTP_200_OK)
-async def get_import_status(job_id: str):
+async def get_import_status(
+    job_id: str,
+    request: Request,
+    request_id: str = Depends(get_request_id)
+):
     """Get the status of an import job"""
-    status = job_manager.get_job_status(job_id)
-    if not status:
-        return ResponseBuilder.error(
-            message="Job not found",
-            error_code="JOB_NOT_FOUND"
+    start_time = time.time()
+    
+    try:
+        job_status = job_manager.get_job_status(job_id)
+        if not job_status:
+            error = ValidationException(
+                message="Job not found",
+                field="job_id",
+                value=job_id,
+                status_code_override=status.HTTP_404_NOT_FOUND
+            )
+            return ResponseBuilder.error(error, request_id=request_id)
+        
+        # Calculate execution time based on job timing
+        execution_time_ms = None
+        if job_status.get('started_at') and job_status.get('completed_at'):
+            # Job is completed, calculate total execution time
+            execution_time_ms = (job_status['completed_at'] - job_status['started_at']) * 1000
+        elif job_status.get('started_at'):
+            # Job is still running, calculate current execution time
+            execution_time_ms = (time.time() - job_status['started_at']) * 1000
+        
+        # Add execution time to the job status data
+        enhanced_status = {
+            **job_status,
+            'execution_time_seconds': execution_time_ms / 1000
+        }
+        
+        response_execution_time_ms = (time.time() - start_time) * 1000
+        
+        return ResponseBuilder.success(
+            data=enhanced_status,
+            message="Job status retrieved successfully",
+            request_id=request_id,
+            execution_time_ms=response_execution_time_ms
         )
-    return ResponseBuilder.success(data=status)
+        
+    except Exception as e:
+        logger.error(f"Unexpected error getting job status {request_id}: {str(e)}", exc_info=True)
+        error = ApplicationException(
+            message=f"Unexpected error getting job status: {str(e)}",
+            cause=e
+        )
+        return ResponseBuilder.error(error, request_id=request_id)
 
 
 @router.get(
@@ -233,6 +278,7 @@ async def get_import_status(job_id: str):
         },
     }
 )
+@async_timed
 async def download_well_production(
     request: Request,
     service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated, assuming QueryService provides repository access
@@ -300,7 +346,7 @@ async def get_well_production_stats(
             data=stats,
             message="Statistics retrieved successfully",
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ApplicationException as e:
@@ -401,7 +447,7 @@ async def get_well_by_code(
             },
             message=f"Found {len(wells_data)} records for well {well_code}",
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ValidationException as e:
@@ -477,7 +523,7 @@ async def get_wells_by_field(
             },
             message=f"Found {len(wells)} wells for field {field_code}",
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ValidationException as e:
@@ -494,4 +540,93 @@ async def get_wells_by_field(
             message=f"Unexpected error getting field wells: {str(e)}",
             cause=e
         )
-        return ResponseBuilder.error(error, request_id=request_id) 
+        return ResponseBuilder.error(error, request_id=request_id)
+
+@router.get("/import/run", status_code=status.HTTP_200_OK, response_model=SuccessResponse)
+async def run_odata_import_well_production(
+    request: Request,
+    service: ODataWellProductionImportService = Depends(provide_odata_well_production_import_service),
+    request_id: str = Depends(get_request_id)
+):
+    """
+    Run well production data import from external OData API with pagination support.
+    
+    This endpoint fetches data from an external OData API using Basic Authentication
+    and handles pagination automatically until all data is retrieved.
+    
+    Features:
+    - Automatic pagination handling (up to 999 records per request)
+    - Basic Authentication support
+    - Comprehensive error handling and retry logic
+    - Data validation and deduplication
+    - Background job processing with status tracking
+    
+    Returns:
+        SuccessResponse with job_id for tracking import progress
+    """
+    try:
+        # Try to create a new job
+        job_id = await job_manager.create_job()
+        if not job_id:
+            error = BusinessRuleViolationException(
+                message="An OData import is already in progress. Please wait for it to complete.",
+                rule="SINGLE_ODATA_IMPORT_RULE"
+            )
+            return ResponseBuilder.error(error, request_id=request_id)
+
+        # Start OData import in background
+        asyncio.create_task(run_odata_import(job_id, service))
+        
+        return ResponseBuilder.success(
+            data={
+                "job_id": job_id,
+                "import_type": "odata_api",
+                "api_endpoint": "External OData API with pagination",
+                "authentication": "Basic Auth",
+                "max_records_per_request": 998
+            },
+            message="OData import started successfully"
+        )
+        
+    except TypeError as e:
+        logger.error(f"Type error in OData import trigger {request_id}: {str(e)}")
+        error = ApplicationException(
+            message=f"Error creating OData import job: {str(e)}",
+            error_code=ErrorCode.USE_CASE_ERROR
+        )
+        return ResponseBuilder.error(error, request_id=request_id)
+    except Exception as e:
+        logger.error(f"Error in OData import trigger {request_id}: {str(e)}")
+        error = ApplicationException(
+            message=f"Unexpected error: {str(e)}",
+            error_code=ErrorCode.INTERNAL_ERROR
+        )
+        return ResponseBuilder.error(error, request_id=request_id)
+
+async def run_odata_import(job_id: str, service: ODataWellProductionImportService):
+    """Run the OData import process and update job status"""
+    try:
+        # Update job status to running
+        await job_manager.update_job(job_id, status=JobStatus.RUNNING)
+        
+        # Run OData import
+        result = await service.import_production_data_from_odata(
+            batch_id=job_id
+        )
+        
+        # Update job with results
+        await job_manager.update_job(
+            job_id,
+            status=JobStatus.COMPLETED,
+            total_records=result.total_items,
+            new_records=result.processed_items,
+            duplicate_records=result.metadata.get('duplicate_records', 0)
+        )
+        
+    except Exception as e:
+        # Update job with error
+        await job_manager.update_job(
+            job_id,
+            status=JobStatus.FAILED,
+            error=str(e)
+        ) 

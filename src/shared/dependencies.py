@@ -16,16 +16,19 @@ from ..domain.ports.external_api_port import ExternalApiPort
 from ..application.services.well_production_service import WellProductionService # For Data Quality
 from ..application.services.well_production_import_service import WellProductionImportService
 from ..application.services.well_production_query_service import WellProductionQueryService
+from ..application.services.odata_well_production_import_service import ODataWellProductionImportService
 
 # Infrastructure imports
-from ..infrastructure.repositories.composite_well_production_repository import CompositeWellProductionRepository
+from ..infrastructure.repositories.duckdb_well_production_repository import DuckDBWellProductionRepository
 from ..infrastructure.adapters.external_api_adapter import ExternalApiAdapter
+from ..infrastructure.adapters.odata_external_api_adapter import ODataExternalApiAdapter
+from ..domain.ports.odata_external_api_port import ODataExternalApiPort
 # from ..infrastructure.db.duckdb_repo import DuckDBWellRepo # Example, not used yet
 
 # Shared utilities
 from ..shared.batch_processor import BatchProcessor, BatchConfig
 from ..shared.job_manager import JobManager
-# from .config.settings import get_settings # Example, not used directly yet, config comes from container.configure()
+from .config.settings import get_settings
 
 
 class DependencyContainer:
@@ -70,15 +73,16 @@ class DependencyContainer:
         if 'repository' not in self._instances:
             repo_paths_config = self._config.get('repository_paths', {})
             data_dir = Path(repo_paths_config.get('data_dir', 'data')) # Default to 'data' if not configured
+            downloads_dir = Path(repo_paths_config.get('downloads_dir', 'downloads')) # Add downloads_dir
             duckdb_filename = repo_paths_config.get('duckdb_filename', 'wells_production.duckdb')
             csv_filename = repo_paths_config.get('csv_filename', 'wells_prod.csv')
 
-            # Pass configured paths to CompositeWellProductionRepository
-            # This requires CompositeWellProductionRepository to accept these as args.
-            self._instances['repository'] = CompositeWellProductionRepository(
-                data_dir=data_dir,
-                duckdb_filename=duckdb_filename, # Add this param
-                csv_filename=csv_filename # Add this param
+            # Use DuckDBWellProductionRepository instead of CompositeWellProductionRepository
+            # This provides fast DuckDB operations for imports and on-demand CSV export
+            self._instances['repository'] = DuckDBWellProductionRepository(
+                db_path=data_dir / duckdb_filename,
+                downloads_dir=downloads_dir,
+                csv_filename=csv_filename
             )
         return self._instances['repository']
     
@@ -144,6 +148,32 @@ class DependencyContainer:
             )
         return self._instances['well_production_query_service_instance']
 
+    def get_odata_external_api_adapter(self) -> ODataExternalApiPort:
+        """Get the OData external API adapter instance"""
+        if 'odata_external_api_adapter' not in self._instances:
+            # Use settings instead of hardcoded values
+            settings = get_settings()
+            self._instances['odata_external_api_adapter'] = ODataExternalApiAdapter(
+                base_url=settings.ODATA_BASE_URL,
+                username=settings.ODATA_USERNAME,
+                password=settings.ODATA_PASSWORD,
+                timeout_seconds=settings.ODATA_TIMEOUT_SECONDS,
+                max_retries=settings.ODATA_MAX_RETRIES,
+                retry_delay_seconds=settings.ODATA_RETRY_DELAY_SECONDS,
+                max_records_per_request=settings.ODATA_MAX_RECORDS_PER_REQUEST
+            )
+        return self._instances['odata_external_api_adapter']
+
+    def get_odata_well_production_import_service_instance(self) -> ODataWellProductionImportService:
+        """Get the OData WellProductionImportService instance."""
+        if 'odata_well_production_import_service_instance' not in self._instances:
+            self._instances['odata_well_production_import_service_instance'] = ODataWellProductionImportService(
+                odata_api_adapter=self.get_odata_external_api_adapter(),
+                repository=self.get_repository(),
+                job_manager=self.get_job_manager()
+            )
+        return self._instances['odata_well_production_import_service_instance']
+
     # --- Override methods for testing ---
     def override_repository(self, repository: WellProductionRepositoryPort) -> None:
         """
@@ -191,6 +221,17 @@ class DependencyContainer:
     def clear(self) -> None:
         """Clear all instances (useful for testing)"""
         self._instances.clear()
+
+    def override_odata_external_api_adapter(self, odata_api: ODataExternalApiPort) -> None:
+        """
+        Override the OData external API adapter instance (useful for testing).
+        
+        Args:
+            odata_api: OData External API instance to use
+        """
+        self._instances['odata_external_api_adapter'] = odata_api
+        # Clear dependent services to force recreation
+        self._instances.pop('odata_well_production_import_service_instance', None)
 
 
 # Global container instance
@@ -281,23 +322,23 @@ def provide_well_production_query_service(
     """FastAPI dependency for WellProductionQueryService."""
     return service
 
-# Old getter names - can be removed or mapped if strictly needed for compatibility
-# For instance, if old code used get_well_production_service for the combined service.
-# Now, they should use the specific service providers.
+# OData Service Providers
+def _get_odata_external_api_adapter_from_container() -> ODataExternalApiPort:
+    """Helper to get ODataExternalApiAdapter from the container for the provider."""
+    return get_container().get_odata_external_api_adapter()
 
-# def get_repository() -> WellProductionRepositoryPort:
-#     return provide_well_production_repository()
+def provide_odata_external_api_adapter(
+    adapter: ODataExternalApiPort = Depends(_get_odata_external_api_adapter_from_container)
+) -> ODataExternalApiPort:
+    """FastAPI dependency for ODataExternalApiAdapter."""
+    return adapter
 
-# def get_external_api() -> ExternalApiPort:
-#     return provide_external_api_adapter()
+def _get_odata_well_production_import_service_from_container() -> ODataWellProductionImportService:
+    """Helper to get ODataWellProductionImportService from the container for the provider."""
+    return get_container().get_odata_well_production_import_service_instance()
 
-# def get_batch_processor() -> BatchProcessor:
-#     return provide_batch_processor()
-
-# def get_well_production_service() -> WellProductionService: # This name is now ambiguous
-#     # This would need to point to one of the new services or be removed.
-#     # For example, if it was primarily for querying:
-#     # return provide_well_production_query_service()
-#     # Or if it was for data quality:
-#     # return provide_well_production_data_quality_service()
-#     pass # Intentionally leave to be resolved or removed
+def provide_odata_well_production_import_service(
+    service: ODataWellProductionImportService = Depends(_get_odata_well_production_import_service_from_container)
+) -> ODataWellProductionImportService:
+    """FastAPI dependency for ODataWellProductionImportService."""
+    return service

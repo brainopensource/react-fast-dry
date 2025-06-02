@@ -4,6 +4,10 @@ from pydantic_settings import BaseSettings
 from typing import Optional
 import sys
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Settings(BaseSettings):
     """Application settings.
@@ -23,6 +27,15 @@ class Settings(BaseSettings):
     # External API configuration
     API_BASE_URL: Optional[str] = os.getenv("API_BASE_URL")
     API_KEY: Optional[str] = os.getenv("API_KEY")
+
+    # OData External API configuration
+    ODATA_BASE_URL: Optional[str] = os.getenv("ODATA_BASE_URL", "https://example.com/odata")
+    ODATA_USERNAME: Optional[str] = os.getenv("ODATA_USERNAME", "dev_user")
+    ODATA_PASSWORD: Optional[str] = os.getenv("ODATA_PASSWORD", "dev_password")
+    ODATA_TIMEOUT_SECONDS: int = int(os.getenv("ODATA_TIMEOUT_SECONDS", "60"))
+    ODATA_MAX_RETRIES: int = int(os.getenv("ODATA_MAX_RETRIES", "3"))
+    ODATA_RETRY_DELAY_SECONDS: float = float(os.getenv("ODATA_RETRY_DELAY_SECONDS", "2.0"))
+    ODATA_MAX_RECORDS_PER_REQUEST: int = int(os.getenv("ODATA_MAX_RECORDS_PER_REQUEST", "998"))
 
     # Configurable data paths
     DATA_ROOT_DIR: Path = APP_DIR / os.getenv("DATA_ROOT_DIR_NAME", "data")

@@ -16,28 +16,33 @@ class TestWellEndpoints:
         # Assert - Import should return 201 Created
         data = test_assertions.assert_successful_response(response, 201)
         
-        # Verify response structure - actual API returns success, data, storage
-        test_assertions.assert_json_structure(data, ["success", "data", "storage"])
+        # Verify response structure - actual API returns success, data, metadata
+        test_assertions.assert_json_structure(data, ["success", "data", "metadata"])
         
         # Verify success flag
         assert data["success"] is True
         
         # Verify data structure
         data_section = data.get("data", {})
-        assert "imported_count" in data_section
-        assert "total_records" in data_section
-        assert "message" in data_section
+        assert "import_summary" in data_section
+        assert "performance" in data_section
+        
+        # Verify import summary structure
+        import_summary = data_section.get("import_summary", {})
+        assert "total_records" in import_summary
+        assert "successful_records" in import_summary
+        assert "duplicate_records" in import_summary
         
         # Verify data types
-        assert isinstance(data_section["imported_count"], int)
-        assert isinstance(data_section["total_records"], int)
-        assert data_section["imported_count"] >= 0
-        assert data_section["total_records"] >= 0
+        assert isinstance(import_summary["total_records"], int)
+        assert isinstance(import_summary["successful_records"], int)
+        assert isinstance(import_summary["duplicate_records"], int)
+        assert import_summary["total_records"] >= 0
+        assert import_summary["successful_records"] >= 0
+        assert import_summary["duplicate_records"] >= 0
         
-        # Verify storage info
-        storage_section = data.get("storage", {})
-        assert "duckdb" in storage_section
-        assert "csv" in storage_section
+        # Storage info is no longer returned in import response since CSV is created on-demand
+        # The import now only updates DuckDB storage
 
     def test_get_stats_endpoint(self, test_client, api_endpoints, test_assertions):
         """Test the wells statistics endpoint."""
@@ -47,17 +52,17 @@ class TestWellEndpoints:
         # Assert
         data = test_assertions.assert_successful_response(response, 200)
         
-        # Verify response structure
-        test_assertions.assert_json_structure(data, ["total_records", "storage_info"])
+        # Verify response structure - stats are now nested under data
+        test_assertions.assert_json_structure(data, ["success", "data", "metadata"])
         
-        # Verify storage info structure
-        storage_info = data.get("storage_info", {})
-        assert "primary" in storage_info
-        assert "secondary" in storage_info
+        # Verify data section structure
+        data_section = data.get("data", {})
+        assert "total_records" in data_section
+        assert "external_api_status" in data_section
         
         # Verify data types
-        assert isinstance(data["total_records"], int)
-        assert data["total_records"] >= 0
+        assert isinstance(data_section["total_records"], int)
+        assert data_section["total_records"] >= 0
 
     def test_get_well_by_code(self, test_client, api_endpoints, sample_well_code, test_assertions):
         """Test getting a specific well by code."""

@@ -1,6 +1,6 @@
 # Well Production API
 
-A high-performance FastAPI application for managing millions of well production records using hexagonal architecture, DDD principles, and dual storage (DuckDB + CSV).
+A high-performance FastAPI application for managing millions of well production records using hexagonal architecture, DDD principles, and DuckDB primary storage with on-demand CSV export.
 
 ## 🏗️ App Architecture
 
@@ -45,8 +45,7 @@ react-fast-v9/
 │   │   ├── repositories/                 # Repository Implementations (Adapters)
 │   │   │   ├── __init__.py               # Repository implementations package
 │   │   │   ├── well_production_repository_impl.py      # CSV implementation
-│   │   │   ├── duckdb_well_production_repository.py    # DuckDB implementation
-│   │   │   └── composite_well_production_repository.py # Composite (CSV + DuckDB)
+│   │   │   └── duckdb_well_production_repository.py    # DuckDB implementation with CSV export
 │   │   ├── db/                          # Database Configurations
 │   │   │   ├── __init__.py               # DB package
 │   │   │   └── duckdb_repo.py            # DuckDB repository implementation
@@ -106,14 +105,13 @@ react-fast-v9/
 │   └── mocked_response.json            # Sample well production data
 │
 ├── data/                               # GENERATED DATA STORAGE
-│   ├── wells_prod.csv                  # CSV export file
 │   └── wells_production.duckdb         # DuckDB database file
 │
 ├── temp/                               # TEMPORARY FILES
 │   └── (temporary processing files)
 │
 ├── downloads/                          # DOWNLOAD STORAGE
-│   └── (downloaded files)
+│   └── (on-demand CSV exports)
 │
 ├── logs/                               # APPLICATION LOGS
 │   └── wells_api.log                   # Application log file
@@ -134,7 +132,7 @@ react-fast-v9/
 
 ## 🚀 Features
 
-- **Dual Storage**: DuckDB for fast analytics + CSV for compatibility
+- **DuckDB Primary Storage**: Fast analytics with on-demand CSV export
 - **High Performance**: Optimized for millions of records
 - **Bulk Operations**: Efficient batch processing
 - **Professional API**: RESTful endpoints with proper error handling
@@ -148,20 +146,21 @@ react-fast-v9/
 ## 📊 Storage Strategy
 
 ### DuckDB (Primary)
-- **Purpose**: High-performance analytics and queries
+- **Purpose**: High-performance analytics, queries, and data storage
 - **Benefits**: 
   - Columnar storage for fast aggregations
   - SQL interface for complex queries
   - Optimized for OLAP workloads
   - Handles millions of records efficiently
+  - Fast import from JSON data sources
 
-### CSV (Secondary)
-- **Purpose**: Data export and compatibility
+### CSV (On-Demand Export)
+- **Purpose**: Data export when needed for downloads
 - **Benefits**:
   - Universal format compatibility
   - Easy data sharing
   - Human-readable
-  - Backup format
+  - Generated only when requested for downloads
 
 ## 🛠️ Installation
 
@@ -254,7 +253,7 @@ curl http://localhost:8080/api/v1/wells/field/8908
 ### Scalability
 - **Local-First**: Designed for local deployment with massive datasets
 - **Memory Efficient**: Streaming processing for large files
-- **Concurrent Storage**: Parallel writes to DuckDB and CSV
+- **Fast DuckDB Storage**: Optimized columnar storage for analytics
 - **Batch Processing**: Configurable batch sizes for optimal performance
 
 ### Monitoring & Observability

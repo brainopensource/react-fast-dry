@@ -2,8 +2,10 @@ fastapi
 uvicorn[standard]
 python-multipart
 pydantic
+pydantic-settings
+python-dotenv
 duckdb>=0.9.0
-polars
+polars>=0.20.0
 httpx
 pandas
 psutil

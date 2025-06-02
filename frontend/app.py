@@ -1,10 +1,15 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import messagebox, filedialog
+import customtkinter as ctk
 import requests
 import threading
 import json
 import time
 import os
+
+# Set CustomTkinter appearance
+ctk.set_appearance_mode("dark")  # Dark theme
+ctk.set_default_color_theme("blue")  # Blue theme for buttons
 
 # --- Model Component ---
 class ApiModel:
@@ -88,85 +93,104 @@ class ApiModel:
 
 
 # --- View Component ---
-class HomeTabFrame(ttk.Frame):
+class HomeTabFrame(ctk.CTkFrame):
     """View for the Home tab."""
     def __init__(self, parent):
         super().__init__(parent)
         self.create_widgets()
 
     def create_widgets(self):
-        ttk.Label(self, text="Welcome to the Well Production Monitoring App!",
-                  font=("Helvetica", 16, "bold")).pack(pady=20)
-        ttk.Label(self, text="Use the tabs above to explore wells, production data, and manage imports.").pack(pady=10)
-        ttk.Label(self, text="Developed with Tkinter and FastAPI.").pack(pady=5)
+        ctk.CTkLabel(self, text="Welcome to the Well Production Monitoring App!",
+                     font=ctk.CTkFont(size=20, weight="bold")).pack(pady=30)
+        ctk.CTkLabel(self, text="Use the tabs above to explore wells, production data, and manage imports.",
+                     font=ctk.CTkFont(size=14)).pack(pady=15)
+        ctk.CTkLabel(self, text="Developed with CustomTkinter and FastAPI.",
+                     font=ctk.CTkFont(size=12)).pack(pady=10)
 
-class SyncTriggerTabFrame(ttk.Frame):
+class SyncTriggerTabFrame(ctk.CTkFrame):
     """View for the Sync Trigger tab."""
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
         self.status_label = None
         self.text_widget = None
-
+        self.latest_job_id = None
+        self.check_status_button = None
         self.create_widgets()
 
     def create_widgets(self):
         # Header
-        ttk.Label(self, text="Trigger Wells Data Import:", font=("Helvetica", 14, "bold")).pack(pady=20)
+        ctk.CTkLabel(self, text="Trigger Wells Data Import:", 
+                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
         
         # Control frame
-        control_frame = ttk.Frame(self)
-        control_frame.pack(pady=10)
+        control_frame = ctk.CTkFrame(self)
+        control_frame.pack(pady=15, padx=20, fill='x')
         
-        ttk.Button(control_frame, text="Trigger Import Now", command=self.controller.trigger_wells_import).pack(pady=10)
+        # Step 1: Trigger Import button
+        ctk.CTkButton(control_frame, text="Trigger Import Now", 
+                      command=self.controller.trigger_wells_import,
+                      height=40, font=ctk.CTkFont(size=14, weight="bold")).pack(side='left', padx=10, pady=15)
+        
+        # Step 2: Check Status button
+        self.check_status_button = ctk.CTkButton(control_frame, text="Check Import Status", 
+                      command=self.controller.check_import_status,
+                      height=40, font=ctk.CTkFont(size=14, weight="bold"), state="disabled")
+        self.check_status_button.pack(side='left', padx=10, pady=15)
         
         # Status label
-        self.status_label = ttk.Label(control_frame, text="Ready to trigger import.")
-        self.status_label.pack(pady=10)
+        self.status_label = ctk.CTkLabel(control_frame, text="Ready to trigger import.",
+                                         font=ctk.CTkFont(size=12))
+        self.status_label.pack(side='left', padx=20, pady=10)
         
         # Response frame
-        response_frame = ttk.LabelFrame(self, text="API Response", padding=10)
-        response_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        response_frame = ctk.CTkFrame(self)
+        response_frame.pack(fill='both', expand=True, padx=20, pady=10)
+        
+        # Header for response frame
+        ctk.CTkLabel(response_frame, text="API Response", 
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=10)
 
         # Text widget for displaying response
-        text_frame = ttk.Frame(response_frame)
-        text_frame.pack(fill='both', expand=True)
+        text_frame = ctk.CTkFrame(response_frame)
+        text_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
-        self.text_widget = tk.Text(text_frame, wrap=tk.WORD, height=15, font=("Consolas", 10))
-        self.text_widget.pack(side='left', fill='both', expand=True)
-
-        # Scrollbar for text widget
-        scrollbar = ttk.Scrollbar(text_frame, command=self.text_widget.yview)
-        scrollbar.pack(side='right', fill='y')
-        self.text_widget.configure(yscrollcommand=scrollbar.set)
-          # Initial message
-        self.text_widget.insert(tk.END, "Response will be shown here after triggering import.\n")
-        self.text_widget.config(state=tk.DISABLED)
+        self.text_widget = ctk.CTkTextbox(text_frame, height=300, font=ctk.CTkFont(family="Consolas", size=10))
+        self.text_widget.pack(fill='both', expand=True, padx=5, pady=5)
+        # Initial message
+        self.text_widget.insert("0.0", "Response will be shown here after triggering import.\n")
 
     def update_status(self, message, is_error=False):
         """Updates the status message displayed to the user."""
         if self.status_label:
-            color = "red" if is_error else "blue"
-            self.status_label.config(text=message, foreground=color)
+            color = "#ff4444" if is_error else "#4a9eff"
+            self.status_label.configure(text=message, text_color=color)
 
     def append_response(self, text):
         """Appends text to the response text widget."""
         if self.text_widget:
-            self.text_widget.config(state=tk.NORMAL)
-            self.text_widget.insert(tk.END, text)
-            self.text_widget.see(tk.END)  # Scroll to bottom
-            self.text_widget.config(state=tk.DISABLED)
+            self.text_widget.insert("end", text)
+            self.text_widget.see("end")  # Scroll to bottom
 
     def set_response(self, text):
         """Sets the text in the response text widget."""
         if self.text_widget:
-            self.text_widget.config(state=tk.NORMAL)
-            self.text_widget.delete(1.0, tk.END)
-            self.text_widget.insert(tk.END, text)
-            self.text_widget.config(state=tk.DISABLED)
+            self.text_widget.delete("0.0", "end")
+            self.text_widget.insert("0.0", text)
+
+    def set_latest_job_id(self, job_id):
+        self.latest_job_id = job_id
+        if self.check_status_button:
+            if job_id:
+                self.check_status_button.configure(state="normal")
+            else:
+                self.check_status_button.configure(state="disabled")
+
+    def get_latest_job_id(self):
+        return self.latest_job_id
 
 
-class WellLookupTabFrame(ttk.Frame):
+class WellLookupTabFrame(ctk.CTkFrame):
     """View for the Well Lookup tab."""
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -180,45 +204,54 @@ class WellLookupTabFrame(ttk.Frame):
 
     def create_widgets(self):
         # Header
-        ttk.Label(self, text="Well Lookup by Code:", font=("Helvetica", 14, "bold")).pack(pady=20)
+        ctk.CTkLabel(self, text="Well Lookup by Code:", 
+                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
         
         # Input frame
-        input_frame = ttk.Frame(self)
-        input_frame.pack(pady=10, fill='x', padx=20)
+        input_frame = ctk.CTkFrame(self)
+        input_frame.pack(pady=15, fill='x', padx=20)
         
-        ttk.Label(input_frame, text="Well Code:").pack(side='left', padx=5)
-        self.entry_widget = ttk.Entry(input_frame, width=20)
-        self.entry_widget.pack(side='left', padx=5)
+        ctk.CTkLabel(input_frame, text="Well Code:", 
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(side='left', padx=10, pady=10)
+        self.entry_widget = ctk.CTkEntry(input_frame, width=150, height=35)
+        self.entry_widget.pack(side='left', padx=10, pady=10)
         
-        search_button = ttk.Button(input_frame, text="Search Well", command=self.controller.search_well_by_code)
-        search_button.pack(side='left', padx=5)
+        search_button = ctk.CTkButton(input_frame, text="Search Well", 
+                                      command=self.controller.search_well_by_code,
+                                      height=35, font=ctk.CTkFont(size=12, weight="bold"))
+        search_button.pack(side='left', padx=10, pady=10)
         
         # Bind Enter key to search
         self.entry_widget.bind('<Return>', lambda event: self.controller.search_well_by_code())
         
         # Status label
-        self.status_label = ttk.Label(input_frame, text="Enter a well code and click Search")
-        self.status_label.pack(side='left', padx=20)
+        self.status_label = ctk.CTkLabel(input_frame, text="Enter a well code and click Search",
+                                         font=ctk.CTkFont(size=11))
+        self.status_label.pack(side='left', padx=20, pady=10)
         
         # Info frame for metadata
-        info_frame = ttk.LabelFrame(self, text="Well Information", padding=10)
-        info_frame.pack(fill='x', padx=10, pady=5)
+        info_frame = ctk.CTkFrame(self)
+        info_frame.pack(fill='x', padx=20, pady=10)
         
-        self.info_text = tk.Text(info_frame, height=4, font=("Consolas", 9))
-        self.info_text.pack(fill='x')
-        self.info_text.config(state=tk.DISABLED)
+        ctk.CTkLabel(info_frame, text="Well Information", 
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)
         
-        # Treeview frame
-        tree_frame = ttk.LabelFrame(self, text="Production Records", padding=10)
-        tree_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        self.info_text = ctk.CTkTextbox(info_frame, height=80, font=ctk.CTkFont(family="Consolas", size=10))
+        self.info_text.pack(fill='x', padx=10, pady=5)
+        
+        # Treeview frame - keeping ttk.Treeview as CustomTkinter doesn't have a replacement
+        import tkinter.ttk as ttk
+        tree_frame = ctk.CTkFrame(self)
+        tree_frame.pack(fill='both', expand=True, padx=20, pady=10)
 
-        # Treeview for displaying production data
-        tree_container = ttk.Frame(tree_frame)
-        tree_container.pack(fill='both', expand=True)
+        ctk.CTkLabel(tree_frame, text="Production Records", 
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=5)        # Treeview for displaying production data
+        tree_container = ctk.CTkFrame(tree_frame)
+        tree_container.pack(fill='both', expand=True, padx=10, pady=5)
 
         self.treeview = ttk.Treeview(tree_container, show="headings")
         self.treeview.pack(side='left', fill='both', expand=True)
-
+        
         # Scrollbars for treeview
         v_scrollbar = ttk.Scrollbar(tree_container, orient="vertical", command=self.treeview.yview)
         v_scrollbar.pack(side='right', fill='y')
@@ -237,21 +270,20 @@ class WellLookupTabFrame(ttk.Frame):
     def clear_input(self):
         """Clear the input field."""
         if self.entry_widget:
-            self.entry_widget.delete(0, tk.END)
+            self.entry_widget.delete(0, "end")
 
     def update_status(self, message, is_error=False):
         """Updates the status message displayed to the user."""
         if self.status_label:
-            color = "red" if is_error else "blue"
-            self.status_label.config(text=message, foreground=color)
+            color = "#ff4444" if is_error else "#4a9eff"
+            self.status_label.configure(text=message, text_color=color)
 
     def display_well_info(self, well_data):
         """Display general well information."""
         if not self.info_text:
             return
             
-        self.info_text.config(state=tk.NORMAL)
-        self.info_text.delete(1.0, tk.END)
+        self.info_text.delete("0.0", "end")
         
         if well_data and 'data' in well_data:
             data = well_data['data']
@@ -260,9 +292,7 @@ class WellLookupTabFrame(ttk.Frame):
             info_text += f"Message: {well_data.get('message', 'N/A')}\n"
             info_text += f"Response Time: {well_data.get('metadata', {}).get('execution_time_ms', 'N/A')} ms"
             
-            self.info_text.insert(tk.END, info_text)
-        
-        self.info_text.config(state=tk.DISABLED)
+            self.info_text.insert("0.0", info_text)
 
     def display_production_data(self, well_data):
         """Display production data in the treeview."""
@@ -338,13 +368,13 @@ class WellLookupTabFrame(ttk.Frame):
             self.treeview["columns"] = []
         
         if self.info_text:
-            self.info_text.config(state=tk.NORMAL)
-            self.info_text.delete(1.0, tk.END)
-            self.info_text.config(state=tk.DISABLED)
+            self.info_text.delete("0.0", "end")
 
 
-class DownloadTabFrame(ttk.Frame):
+class DownloadTabFrame(ctk.CTkFrame):
     """View for downloading CSV files."""
+    DEFAULT_FILENAME = "wells_production_monthly.csv"
+
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
@@ -355,42 +385,79 @@ class DownloadTabFrame(ttk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        # Path selection
-        path_frame = ttk.Frame(self)
-        path_frame.pack(pady=5, fill='x', padx=10)
-        self.path_entry = ttk.Entry(path_frame, width=50)
-        self.path_entry.pack(side='left', fill='x', expand=True)
-        ttk.Button(path_frame, text='Browse...', command=self.browse_file).pack(side='left')
+        # Header
+        ctk.CTkLabel(self, text="Download CSV Data", 
+                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
+        
+        # Path selection frame
+        path_frame = ctk.CTkFrame(self)
+        path_frame.pack(pady=15, fill='x', padx=20)
+        
+        ctk.CTkLabel(path_frame, text="Save Location:", 
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(anchor='w', padx=10, pady=(10, 5))
+        
+        path_input_frame = ctk.CTkFrame(path_frame)
+        path_input_frame.pack(fill='x', padx=10, pady=(0, 10))
+        
+        # Set default path to current working directory + default filename
+        import os
+        default_dir = os.getcwd()
+        default_path = os.path.join(default_dir, self.DEFAULT_FILENAME)
+        self.save_path = default_path
+        
+        self.path_entry = ctk.CTkEntry(path_input_frame, height=35, font=ctk.CTkFont(size=11))
+        self.path_entry.pack(side='left', fill='x', expand=True, padx=(0, 10))
+        self.path_entry.delete(0, "end")
+        self.path_entry.insert(0, default_path)
+        self.path_entry.configure(state="disabled")
+        
+        ctk.CTkButton(path_input_frame, text='Browse...', command=self.browse_folder,
+                      width=100, height=35).pack(side='right')
 
-        # Download
-        ttk.Button(self, text='Download CSV', command=self.controller.trigger_wells_download).pack(pady=10)
-        self.progress = ttk.Progressbar(self, orient='horizontal', length=400, mode='determinate')
+        # Download section
+        download_frame = ctk.CTkFrame(self)
+        download_frame.pack(pady=15, fill='x', padx=20)
+        
+        ctk.CTkButton(download_frame, text='Download CSV', 
+                      command=self.controller.trigger_wells_download,
+                      height=40, font=ctk.CTkFont(size=14, weight="bold")).pack(pady=15)
+        # Progress bar
+        self.progress = ctk.CTkProgressBar(download_frame, width=400, height=20)
         self.progress.pack(pady=10)
-        self.status_label = ttk.Label(self, text='Ready to download', foreground='blue')
-        self.status_label.pack(pady=5)
+        self.progress.set(0)  # Initialize to 0%
+        
+        # Status label
+        self.status_label = ctk.CTkLabel(download_frame, text='Ready to download',
+                                         font=ctk.CTkFont(size=12))
+        self.status_label.pack(pady=10)
 
-    def browse_file(self):
-        file_path = filedialog.asksaveasfilename(defaultextension='.csv', filetypes=[('CSV','*.csv')], title='Save CSV as')
-        if file_path:
-            self.save_path = file_path
-            self.path_entry.delete(0, tk.END)
-            self.path_entry.insert(0, file_path)
+    def browse_folder(self):
+        folder_path = filedialog.askdirectory(title='Select Folder to Save CSV')
+        if folder_path and self.path_entry:
+            import os
+            full_path = os.path.join(folder_path, self.DEFAULT_FILENAME)
+            self.save_path = full_path
+            self.path_entry.configure(state="normal")
+            self.path_entry.delete(0, "end")
+            self.path_entry.insert(0, full_path)
+            self.path_entry.configure(state="disabled")
 
     def update_status(self, message, is_error=False):
         """Updates the status message displayed to the user."""
         if self.status_label:
-            color = "red" if is_error else "blue"
-            self.status_label.config(text=message, foreground=color)
+            color = "#ff4444" if is_error else "#4a9eff"
+            self.status_label.configure(text=message, text_color=color)
 
     def update_progress(self, progress_value):
-        """Updates the progress bar with the given value (0-100)."""
+        """Updates the progress bar with the given value (0-1)."""
         if self.progress:
-            self.progress['value'] = progress_value
+            # CustomTkinter progress bar expects values between 0 and 1
+            self.progress.set(progress_value / 100.0)
 
 
-class AppView(tk.Tk):
+class AppView(ctk.CTk):
     """
-    Main Application View.
+    Main Application View with sidebar navigation for dashboard look.
     Responsible for creating the main window and managing tab views.
     """
     def __init__(self, controller):
@@ -400,25 +467,66 @@ class AppView(tk.Tk):
         self.geometry("1200x800")
         print("AppView initialized")
 
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill='both', expand=True, padx=10, pady=10)
+        # Main layout: sidebar (left) and content (right)
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(1, weight=1)
 
-        self.home_tab = HomeTabFrame(self.notebook)
-        self.notebook.add(self.home_tab, text='Home')
+        # Sidebar
+        self.sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
+        self.sidebar.grid(row=0, column=0, sticky="nswe")
+        self.sidebar.grid_rowconfigure(5, weight=1)  # Pushes buttons to top
 
-        self.sync_tab = SyncTriggerTabFrame(self.notebook, self.controller)
-        self.notebook.add(self.sync_tab, text='Sync Trigger')
+        # Sidebar buttons
+        self.btn_home = ctk.CTkButton(self.sidebar, text="Home", command=lambda: self.show_frame("home"), height=50, font=ctk.CTkFont(size=15, weight="bold"))
+        self.btn_home.grid(row=0, column=0, sticky="ew", padx=20, pady=(40, 10))
+        self.btn_sync = ctk.CTkButton(self.sidebar, text="Sync Trigger", command=lambda: self.show_frame("sync"), height=50, font=ctk.CTkFont(size=15, weight="bold"))
+        self.btn_sync.grid(row=1, column=0, sticky="ew", padx=20, pady=10)
+        # New Sync Run button
+        self.btn_sync_run = ctk.CTkButton(self.sidebar, text="Sync Run", command=lambda: self.show_frame("sync_run"), height=50, font=ctk.CTkFont(size=15, weight="bold"))
+        self.btn_sync_run.grid(row=2, column=0, sticky="ew", padx=20, pady=10)
+        self.btn_lookup = ctk.CTkButton(self.sidebar, text="Well Lookup", command=lambda: self.show_frame("lookup"), height=50, font=ctk.CTkFont(size=15, weight="bold"))
+        self.btn_lookup.grid(row=3, column=0, sticky="ew", padx=20, pady=10)
+        self.btn_download = ctk.CTkButton(self.sidebar, text="Download", command=lambda: self.show_frame("download"), height=50, font=ctk.CTkFont(size=15, weight="bold"))
+        self.btn_download.grid(row=4, column=0, sticky="ew", padx=20, pady=10)
 
-        self.well_lookup_tab = WellLookupTabFrame(self.notebook, self.controller)
-        self.notebook.add(self.well_lookup_tab, text='Well Lookup')
+        # Main content area
+        self.content = ctk.CTkFrame(self, corner_radius=10)
+        self.content.grid(row=0, column=1, sticky="nswe", padx=10, pady=10)
+        self.content.grid_rowconfigure(0, weight=1)
+        self.content.grid_columnconfigure(0, weight=1)
 
-        self.download_tab = DownloadTabFrame(self.notebook, self.controller)
-        self.notebook.add(self.download_tab, text='Download')
+        # Create tab frames (but don't pack them yet)
+        self.home_tab = HomeTabFrame(self.content)
+        self.sync_tab = SyncTriggerTabFrame(self.content, self.controller)
+        self.sync_run_tab = SyncRunTabFrame(self.content, self.controller)
+        self.well_lookup_tab = WellLookupTabFrame(self.content, self.controller)
+        self.download_tab = DownloadTabFrame(self.content, self.controller)
+
+        self.frames = {
+            "home": self.home_tab,
+            "sync": self.sync_tab,
+            "sync_run": self.sync_run_tab,
+            "lookup": self.well_lookup_tab,
+            "download": self.download_tab
+        }
+
+        for frame in self.frames.values():
+            frame.grid(row=0, column=0, sticky="nswe")
+            frame.grid_remove()
+
+        self.show_frame("home")  # Show home by default
 
         # Link controller to views for explicit communication
         print("Setting view references in AppView")
-        self.controller.set_view_references(self.sync_tab, self.well_lookup_tab, self.download_tab)
+        self.controller.set_view_references(self.sync_tab, self.well_lookup_tab, self.download_tab, self.sync_run_tab)
         print("View references set in AppView")
+
+    def show_frame(self, name):
+        for key, frame in self.frames.items():
+            if key == name:
+                frame.grid()
+            else:
+                frame.grid_remove()
 
 
 # --- Controller Component ---
@@ -431,129 +539,199 @@ class AppController:
     def __init__(self):
         self.model = ApiModel()
         print("AppController initialized")
-        
-        # Initialize references to specific tab views - will be set by AppView
         self.sync_view = None
         self.well_lookup_view = None
         self.download_view = None
+        self.sync_run_view = None
         print("Controller view references initialized to None")
-        
-        # Create the view AFTER initializing the references
         self.view = AppView(self)
         print("AppView instantiated in AppController")
 
-    def set_view_references(self, sync_view, well_lookup_view, download_view):
-        """Sets references to the specific tab views for direct updates."""
+    def set_view_references(self, sync_view, well_lookup_view, download_view, sync_run_view=None):
         print("Setting view references in AppController")
         self.sync_view = sync_view
         self.well_lookup_view = well_lookup_view
         self.download_view = download_view
+        self.sync_run_view = sync_run_view
         print(f"Sync view set: {self.sync_view is not None}")
         print(f"Well Lookup view set: {self.well_lookup_view is not None}")
         print(f"Download view set: {self.download_view is not None}")
+        print(f"Sync Run view set: {self.sync_run_view is not None}")
         print("View references set in AppController")
 
     def run(self):
         """Starts the Tkinter application main loop."""
         self.view.mainloop()
 
-    # --- Enhanced Controller methods for Sync Trigger Tab ---
+    # --- Sync Trigger Tab: Step 1 ---
     def trigger_wells_import(self):
-        """Initiates the wells import process using both trigger and status endpoints."""
-        print("Triggering import in AppController")
+        print("Triggering import in AppController (Step 1)")
         if self.sync_view:
             self.sync_view.update_status("Starting import process...", is_error=False)
             self.sync_view.set_response("Starting import process...\n")
-            threading.Thread(target=self._perform_import_trigger_and_status, daemon=True).start()
+            threading.Thread(target=self._perform_import_trigger, daemon=True).start()
         else:
             print("self.sync_view is None in AppController")
 
-    def _perform_import_trigger_and_status(self):
-        """Perform the import trigger request and then check status."""
-        
+    def _perform_import_trigger(self):
         def update_ui(message):
             if self.sync_view:
                 self.sync_view.append_response(message)
-        
-        # Step 1: Trigger import
         self.view.after(0, lambda: update_ui("=== STEP 1: Triggering Import ===\n"))
         self.view.after(0, lambda: update_ui("Sending request to /api/v1/wells/import/trigger\n\n"))
-        
         status_code, result = self.model.trigger_wells_import()
-        
         if status_code is not None:
             if status_code == 200 and isinstance(result, dict):
-                # Extract job_id from trigger response
                 job_id = result.get('data', {}).get('job_id')
-                
-                # Format trigger response
                 trigger_response = f"✅ Import triggered successfully!\n"
                 trigger_response += f"Status Code: {status_code}\n"
                 trigger_response += f"Job ID: {job_id}\n"
                 trigger_response += f"Message: {result.get('message', 'N/A')}\n"
                 trigger_response += f"Response: {json.dumps(result, indent=2)}\n\n"
-                
                 self.view.after(0, lambda: update_ui(trigger_response))
-                self.view.after(0, lambda: self.sync_view.update_status(f"Import triggered! Job ID: {job_id}", is_error=False))
-                
-                if job_id:
-                    # Step 2: Wait a moment and check status
-                    self.view.after(0, lambda: update_ui("=== STEP 2: Checking Import Status ===\n"))
-                    self.view.after(0, lambda: update_ui("Waiting 1 second before checking status...\n"))
-                    
-                    time.sleep(1)  # Wait a moment for the job to start
-                    
-                    self.view.after(0, lambda: update_ui(f"Sending request to /api/v1/wells/import/status/{job_id}\n\n"))
-                    
-                    status_code_2, status_result = self.model.get_import_status(job_id)
-                    
-                    if status_code_2 is not None:
-                        if status_code_2 == 200 and isinstance(status_result, dict):
-                            status_data = status_result.get('data', {})
-                            import_status = status_data.get('status', 'unknown')
-                            
-                            status_response = f"✅ Status check successful!\n"
-                            status_response += f"Status Code: {status_code_2}\n"
-                            status_response += f"Current Import Status: {import_status}\n"
-                            status_response += f"Job ID: {status_data.get('job_id', 'N/A')}\n"
-                            status_response += f"Created At: {status_data.get('created_at', 'N/A')}\n"
-                            status_response += f"Response: {json.dumps(status_result, indent=2)}\n\n"
-                            
-
-                            self.view.after(0, lambda: update_ui(status_response))
-                            self.view.after(0, lambda: self.sync_view.update_status(f"Status: {import_status}", is_error=False))
-                        else:
-                            error_response = f"❌ Status check failed!\n"
-                            error_response += f"Status Code: {status_code_2}\n"
-                            error_response += f"Error: {status_result}\n\n"
-                            
-                            self.view.after(0, lambda: update_ui(error_response))
-                            self.view.after(0, lambda: self.sync_view.update_status(f"Status check failed: HTTP {status_code_2}", is_error=True))
-                    else:
-                        error_response = f"❌ Status check connection error!\n"
-                        error_response += f"Error: {status_result}\n\n"
-                        
-                        self.view.after(0, lambda: update_ui(error_response))
-                        self.view.after(0, lambda: self.sync_view.update_status("Status check connection failed", is_error=True))
-                else:
-                    error_msg = "❌ No job_id returned from trigger request!\n\n"
-                    self.view.after(0, lambda: update_ui(error_msg))
-                    self.view.after(0, lambda: self.sync_view.update_status("No job_id returned", is_error=True))
+                if self.sync_view:
+                    self.view.after(0, lambda: self.sync_view.update_status(f"Import triggered! Job ID: {job_id}", is_error=False))
+                    self.view.after(0, lambda: self.sync_view.set_latest_job_id(job_id))
             else:
-                # Trigger failed
                 error_response = f"❌ Import trigger failed!\n"
                 error_response += f"Status Code: {status_code}\n"
                 error_response += f"Error: {result}\n\n"
-                
                 self.view.after(0, lambda: update_ui(error_response))
                 self.view.after(0, lambda: self.sync_view.update_status(f"Trigger failed: HTTP {status_code}", is_error=True))
         else:
-            # Connection or other error
             error_response = f"❌ Connection error during trigger!\n"
             error_response += f"Error: {result}\n\n"
-            
             self.view.after(0, lambda: update_ui(error_response))
             self.view.after(0, lambda: self.sync_view.update_status("Connection failed", is_error=True))
+
+    # --- Sync Trigger Tab: Step 2 ---
+    def check_import_status(self):
+        if not self.sync_view:
+            print("self.sync_view is None in AppController (check_import_status)")
+            return
+        job_id = self.sync_view.get_latest_job_id()
+        if not job_id:
+            self.sync_view.append_response("❌ No job_id available. Please trigger import first.\n")
+            self.sync_view.update_status("No job_id available. Trigger import first.", is_error=True)
+            return
+        self.sync_view.update_status(f"Checking status for job_id: {job_id}", is_error=False)
+        threading.Thread(target=self._perform_import_status, args=(job_id,), daemon=True).start()
+
+    def _perform_import_status(self, job_id):
+        def update_ui(message):
+            if self.sync_view:
+                self.sync_view.append_response(message)
+        self.view.after(0, lambda: update_ui(f"=== STEP 2: Checking Import Status for job_id {job_id} ===\n"))
+        self.view.after(0, lambda: update_ui(f"Sending request to /api/v1/wells/import/status/{job_id}\n\n"))
+        status_code, status_result = self.model.get_import_status(job_id)
+        if status_code is not None:
+            if status_code == 200 and isinstance(status_result, dict):
+                status_data = status_result.get('data', {})
+                import_status = status_data.get('status', 'unknown')
+                status_response = f"✅ Status check successful!\n"
+                status_response += f"Status Code: {status_code}\n"
+                status_response += f"Current Import Status: {import_status}\n"
+                status_response += f"Job ID: {status_data.get('job_id', 'N/A')}\n"
+                status_response += f"Created At: {status_data.get('created_at', 'N/A')}\n"
+                status_response += f"Response: {json.dumps(status_result, indent=2)}\n\n"
+                self.view.after(0, lambda: update_ui(status_response))
+                self.view.after(0, lambda: self.sync_view.update_status(f"Status: {import_status}", is_error=False))
+            else:
+                error_response = f"❌ Status check failed!\n"
+                error_response += f"Status Code: {status_code}\n"
+                error_response += f"Error: {status_result}\n\n"
+                self.view.after(0, lambda: update_ui(error_response))
+                self.view.after(0, lambda: self.sync_view.update_status(f"Status check failed: HTTP {status_code}", is_error=True))
+        else:
+            error_response = f"❌ Status check connection error!\n"
+            error_response += f"Error: {status_result}\n\n"
+            self.view.after(0, lambda: update_ui(error_response))
+            self.view.after(0, lambda: self.sync_view.update_status("Status check connection failed", is_error=True))
+
+    # --- Sync Run Tab: Step 1 ---
+    def trigger_wells_import_run(self):
+        print("Triggering import run in AppController (Step 1)")
+        if self.sync_run_view:
+            self.sync_run_view.update_status("Starting import run process...", is_error=False)
+            self.sync_run_view.set_response("Starting import run process...\n")
+            threading.Thread(target=self._perform_import_run_trigger, daemon=True).start()
+        else:
+            print("self.sync_run_view is None in AppController")
+
+    def _perform_import_run_trigger(self):
+        def update_ui(message):
+            if self.sync_run_view:
+                self.sync_run_view.append_response(message)
+        self.view.after(0, lambda: update_ui("=== STEP 1: Triggering Import Run ===\n"))
+        self.view.after(0, lambda: update_ui("Sending request to /api/v1/wells/import/run\n\n"))
+        status_code, result = self.model._make_request('GET', '/api/v1/wells/import/run')
+        if status_code is not None:
+            if status_code == 200 and isinstance(result, dict):
+                job_id = result.get('data', {}).get('job_id')
+                trigger_response = f"✅ Import run triggered successfully!\n"
+                trigger_response += f"Status Code: {status_code}\n"
+                trigger_response += f"Job ID: {job_id}\n"
+                trigger_response += f"Message: {result.get('message', 'N/A')}\n"
+                trigger_response += f"Response: {json.dumps(result, indent=2)}\n\n"
+                self.view.after(0, lambda: update_ui(trigger_response))
+                if self.sync_run_view:
+                    self.view.after(0, lambda: self.sync_run_view.update_status(f"Import run triggered! Job ID: {job_id}", is_error=False))
+                    self.view.after(0, lambda: self.sync_run_view.set_latest_job_id(job_id))
+            else:
+                error_response = f"❌ Import run trigger failed!\n"
+                error_response += f"Status Code: {status_code}\n"
+                error_response += f"Error: {result}\n\n"
+                self.view.after(0, lambda: update_ui(error_response))
+                self.view.after(0, lambda: self.sync_run_view.update_status(f"Trigger failed: HTTP {status_code}", is_error=True))
+        else:
+            error_response = f"❌ Connection error during trigger!\n"
+            error_response += f"Error: {result}\n\n"
+            self.view.after(0, lambda: update_ui(error_response))
+            self.view.after(0, lambda: self.sync_run_view.update_status("Connection failed", is_error=True))
+
+    # --- Sync Run Tab: Step 2 ---
+    def check_import_status_run(self):
+        if not self.sync_run_view:
+            print("self.sync_run_view is None in AppController (check_import_status_run)")
+            return
+        job_id = self.sync_run_view.get_latest_job_id()
+        if not job_id:
+            self.sync_run_view.append_response("❌ No job_id available. Please trigger import run first.\n")
+            self.sync_run_view.update_status("No job_id available. Trigger import run first.", is_error=True)
+            return
+        self.sync_run_view.update_status(f"Checking status for job_id: {job_id}", is_error=False)
+        threading.Thread(target=self._perform_import_status_run, args=(job_id,), daemon=True).start()
+
+    def _perform_import_status_run(self, job_id):
+        def update_ui(message):
+            if self.sync_run_view:
+                self.sync_run_view.append_response(message)
+        self.view.after(0, lambda: update_ui(f"=== STEP 2: Checking Import Status for job_id {job_id} ===\n"))
+        self.view.after(0, lambda: update_ui(f"Sending request to /api/v1/wells/import/status/{job_id}\n\n"))
+        status_code, status_result = self.model.get_import_status(job_id)
+        if status_code is not None:
+            if status_code == 200 and isinstance(status_result, dict):
+                status_data = status_result.get('data', {})
+                import_status = status_data.get('status', 'unknown')
+                status_response = f"✅ Status check successful!\n"
+                status_response += f"Status Code: {status_code}\n"
+                status_response += f"Current Import Status: {import_status}\n"
+                status_response += f"Job ID: {status_data.get('job_id', 'N/A')}\n"
+                status_response += f"Created At: {status_data.get('created_at', 'N/A')}\n"
+                status_response += f"Response: {json.dumps(status_result, indent=2)}\n\n"
+                self.view.after(0, lambda: update_ui(status_response))
+                self.view.after(0, lambda: self.sync_run_view.update_status(f"Status: {import_status}", is_error=False))
+            else:
+                error_response = f"❌ Status check failed!\n"
+                error_response += f"Status Code: {status_code}\n"
+                error_response += f"Error: {status_result}\n\n"
+                self.view.after(0, lambda: update_ui(error_response))
+                self.view.after(0, lambda: self.sync_run_view.update_status(f"Status check failed: HTTP {status_code}", is_error=True))
+        else:
+            error_response = f"❌ Status check connection error!\n"
+            error_response += f"Error: {status_result}\n\n"
+            self.view.after(0, lambda: update_ui(error_response))
+            self.view.after(0, lambda: self.sync_run_view.update_status("Status check connection failed", is_error=True))
 
     # --- Controller methods for Well Lookup Tab ---
     def search_well_by_code(self):
@@ -596,30 +774,119 @@ class AppController:
                 self.well_lookup_view.clear_display()
             else:
                 self.well_lookup_view.update_status(f"Error: {data}", is_error=True)
-                self.well_lookup_view.clear_display()
-        
+                self.well_lookup_view.clear_display()        
         self.view.after(0, update_ui)
-
+    
     # --- Controller methods for Download Tab ---
     def trigger_wells_download(self):
-        if self.download_view:
-            path = getattr(self.download_view, 'save_path', None)
-            if not path:
-                self.download_view.update_status("Please select a save location first", is_error=True)
-                return
-            self.download_view.update_status("Starting download...", is_error=False)
-            self.download_view.update_progress(0)
-            threading.Thread(target=self._perform_download, daemon=True).start()
+        if not self.download_view:
+            print("Error: download_view is None")
+            return
+            
+        path = getattr(self.download_view, 'save_path', None)
+        if not path:
+            self.download_view.update_status("Please select a save location first", is_error=True)
+            return
+        self.download_view.update_status("Starting download...", is_error=False)
+        self.download_view.update_progress(0)
+        threading.Thread(target=self._perform_download, daemon=True).start()
 
     def _perform_download(self):
+        if not self.download_view:
+            print("Error: download_view is None in _perform_download")
+            return
+            
         save_path = self.download_view.save_path
         def progress_cb(p):
-            self.view.after(0, lambda: self.download_view.update_progress(p))
+            if self.download_view:
+                self.view.after(0, lambda: self.download_view.update_progress(p))
+                
         status, result = self.model.download_csv('/api/v1/wells/download', save_path, progress_cb)
-        if status == 200:
-            self.view.after(0, lambda: self.download_view.update_status(f"Download complete: {result}", is_error=False))
-        else:
-            self.view.after(0, lambda: self.download_view.update_status(f"Download failed: {result}", is_error=True))
+        if self.download_view:
+            if status == 200:
+                self.view.after(0, lambda: self.download_view.update_status(f"Download complete: {result}", is_error=False))
+            else:
+                self.view.after(0, lambda: self.download_view.update_status(f"Download failed: {result}", is_error=True))
+
+
+class SyncRunTabFrame(ctk.CTkFrame):
+    """View for the Sync Run tab (like Sync Trigger, but uses /run endpoint)."""
+    def __init__(self, parent, controller):
+        super().__init__(parent)
+        self.controller = controller
+        self.status_label = None
+        self.text_widget = None
+        self.latest_job_id = None
+        self.check_status_button = None
+        self.create_widgets()
+
+    def create_widgets(self):
+        # Header
+        ctk.CTkLabel(self, text="Trigger Wells Data Import (Run):", 
+                     font=ctk.CTkFont(size=18, weight="bold")).pack(pady=20)
+        
+        # Control frame
+        control_frame = ctk.CTkFrame(self)
+        control_frame.pack(pady=15, padx=20, fill='x')
+        
+        # Step 1: Trigger Import Run button
+        ctk.CTkButton(control_frame, text="Trigger Import Run", 
+                      command=self.controller.trigger_wells_import_run,
+                      height=40, font=ctk.CTkFont(size=14, weight="bold")).pack(side='left', padx=10, pady=15)
+        
+        # Step 2: Check Status button
+        self.check_status_button = ctk.CTkButton(control_frame, text="Check Import Status", 
+                      command=self.controller.check_import_status_run,
+                      height=40, font=ctk.CTkFont(size=14, weight="bold"), state="disabled")
+        self.check_status_button.pack(side='left', padx=10, pady=15)
+        
+        # Status label
+        self.status_label = ctk.CTkLabel(control_frame, text="Ready to trigger import run.",
+                                         font=ctk.CTkFont(size=12))
+        self.status_label.pack(side='left', padx=20, pady=10)
+        
+        # Response frame
+        response_frame = ctk.CTkFrame(self)
+        response_frame.pack(fill='both', expand=True, padx=20, pady=10)
+        
+        # Header for response frame
+        ctk.CTkLabel(response_frame, text="API Response", 
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(pady=10)
+
+        # Text widget for displaying response
+        text_frame = ctk.CTkFrame(response_frame)
+        text_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+        self.text_widget = ctk.CTkTextbox(text_frame, height=300, font=ctk.CTkFont(family="Consolas", size=10))
+        self.text_widget.pack(fill='both', expand=True, padx=5, pady=5)
+        # Initial message
+        self.text_widget.insert("0.0", "Response will be shown here after triggering import run.\n")
+
+    def update_status(self, message, is_error=False):
+        if self.status_label:
+            color = "#ff4444" if is_error else "#4a9eff"
+            self.status_label.configure(text=message, text_color=color)
+
+    def append_response(self, text):
+        if self.text_widget:
+            self.text_widget.insert("end", text)
+            self.text_widget.see("end")
+
+    def set_response(self, text):
+        if self.text_widget:
+            self.text_widget.delete("0.0", "end")
+            self.text_widget.insert("0.0", text)
+
+    def set_latest_job_id(self, job_id):
+        self.latest_job_id = job_id
+        if self.check_status_button:
+            if job_id:
+                self.check_status_button.configure(state="normal")
+            else:
+                self.check_status_button.configure(state="disabled")
+
+    def get_latest_job_id(self):
+        return self.latest_job_id
 
 
 if __name__ == "__main__":
