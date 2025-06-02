@@ -23,7 +23,12 @@ from ...shared.dependencies import (
     provide_well_production_query_service,
     # provide_well_production_data_quality_service # Only if a route uses DataQualityService
 )
-from ...shared.exceptions import ApplicationException, ValidationException
+from ...shared.exceptions import (
+    ApplicationException, 
+    ValidationException,
+    BusinessRuleViolationException,
+    ErrorCode
+)
 from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
 from ...shared.job_manager import JobManager, JobStatus
 
@@ -141,10 +146,11 @@ async def trigger_import_well_production(
         # Try to create a new job
         job_id = await job_manager.create_job()
         if not job_id:
-            return ResponseBuilder.error(
+            error = BusinessRuleViolationException(
                 message="An import is already in progress. Please wait for it to complete.",
-                error_code="IMPORT_IN_PROGRESS"
+                rule="SINGLE_IMPORT_RULE"
             )
+            return ResponseBuilder.error(error, request_id=request_id)
 
         # Start import in background
         asyncio.create_task(run_import(job_id, service))
@@ -156,16 +162,18 @@ async def trigger_import_well_production(
         
     except TypeError as e:
         logger.error(f"Type error in import trigger {request_id}: {str(e)}")
-        return ResponseBuilder.error(
+        error = ApplicationException(
             message=f"Error creating import job: {str(e)}",
-            error_code="JOB_CREATION_ERROR"
+            error_code=ErrorCode.USE_CASE_ERROR
         )
+        return ResponseBuilder.error(error, request_id=request_id)
     except Exception as e:
         logger.error(f"Error in import trigger {request_id}: {str(e)}")
-        return ResponseBuilder.error(
+        error = ApplicationException(
             message=f"Unexpected error: {str(e)}",
-            error_code="INTERNAL_ERROR"
+            error_code=ErrorCode.INTERNAL_ERROR
         )
+        return ResponseBuilder.error(error, request_id=request_id)
 
 async def run_import(job_id: str, service: WellProductionImportService):
     """Run the import process and update job status"""

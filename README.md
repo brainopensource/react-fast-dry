@@ -6,11 +6,13 @@ A high-performance FastAPI application for managing millions of well production 
 
 This project follows **Hexagonal Architecture** (Ports and Adapters) with **Domain-Driven Design** principles:
 
+```
 react-fast-v9/
 │
 ├── src/                                    # Main Application Source
 │   ├── __init__.py                        # Package initializer
 │   ├── main.py                           # FastAPI application entry point
+│   ├── favicon.ico                       # Application favicon
 │   │
 │   ├── domain/                           # DOMAIN LAYER (Core Business Logic)
 │   │   ├── __init__.py                   # Domain package initializer
@@ -18,27 +20,25 @@ react-fast-v9/
 │   │   │   ├── __init__.py               # Entities package
 │   │   │   └── well_production.py        # WellProduction entity with business logic
 │   │   ├── value_objects/                # Immutable Value Objects
-│   │   │   ├── __init__.py               # Value objects package
-│   │   │   └── source_data.py            # SourceData value object
+│   │   │   └── __init__.py               # Value objects package
 │   │   ├── repositories/                 # Repository Interfaces (Ports)
 │   │   │   ├── __init__.py               # Repository package
-│   │   │   └── well_production_repository.py  # Repository interface
-│   │   ├── events/                       # Domain Events (for future use)
-│   │   │   └── __init__.py               # Events package
-│   │   └── aggregates/                   # Domain Aggregates (for future use)
-│   │       └── __init__.py               # Aggregates package
+│   │   │   ├── well_production_repository.py  # Repository interface
+│   │   │   └── ports.py                  # Repository port definitions
+│   │   └── ports/                        # Domain Ports (for future use)
+│   │       └── __init__.py               # Ports package
 │   │
 │   ├── application/                      # APPLICATION LAYER (Use Cases & Services)
 │   │   ├── __init__.py                   # Application package initializer
-│   │   ├── use_cases/                    # Application Use Cases
-│   │   │   ├── __init__.py               # Use cases package
-│   │   │   └── import_well_production.py # Import use case implementation
-│   │   ├── services/                     # Application Services
-│   │   │   └── __init__.py               # Services package
-│   │   ├── dtos/                         # Data Transfer Objects (empty - using entities)
-│   │   │   └── __init__.py               # DTOs package
-│   │   └── interfaces/                   # Application Interfaces
-│   │       └── __init__.py               # Interfaces package
+│   │   └── services/                     # Application Services
+│   │       ├── __init__.py               # Services package
+│   │       ├── base.py                   # Base service class
+│   │       ├── well_production_service.py        # Core well production service
+│   │       ├── well_production_import_service.py # Import service implementation
+│   │       ├── well_production_query_service.py  # Query service implementation
+│   │       ├── external_api_service.py   # External API service
+│   │       ├── fetchers.py               # Data fetching utilities
+│   │       └── wells_service.py          # Wells service wrapper
 │   │
 │   ├── infrastructure/                   # INFRASTRUCTURE LAYER (External Adapters)
 │   │   ├── __init__.py                   # Infrastructure package initializer
@@ -48,28 +48,46 @@ react-fast-v9/
 │   │   │   ├── duckdb_well_production_repository.py    # DuckDB implementation
 │   │   │   └── composite_well_production_repository.py # Composite (CSV + DuckDB)
 │   │   ├── db/                          # Database Configurations
-│   │   │   └── __init__.py               # DB package
+│   │   │   ├── __init__.py               # DB package
+│   │   │   └── duckdb_repo.py            # DuckDB repository implementation
 │   │   ├── external/                     # External Service Adapters
-│   │   │   └── __init__.py               # External package
-│   │   ├── operations/                   # Data Operations
-│   │   │   └── __init__.py               # Operations package
-│   │   └── cache/                        # Caching Layer
-│   │       └── __init__.py               # Cache package
+│   │   │   ├── __init__.py               # External package
+│   │   │   └── pandas_csv_exporter.py    # CSV export functionality
+│   │   ├── operations/                   # Data Operations & SQL
+│   │   │   ├── __init__.py               # Operations package
+│   │   │   └── wells.sql                 # SQL queries for well operations
+│   │   └── adapters/                     # Infrastructure Adapters
+│   │       └── __init__.py               # Adapters package
 │   │
 │   ├── interfaces/                       # INTERFACE LAYER (API Controllers)
 │   │   ├── __init__.py                   # Interfaces package initializer
-│   │   ├── api/                          # REST API Controllers
-│   │   │   ├── __init__.py               # API package
-│   │   │   └── well_production_routes.py # FastAPI routes for well production
-│   │   └── middleware/                   # API Middleware
-│   │       └── __init__.py               # Middleware package
+│   │   └── api/                          # REST API Controllers
+│   │       ├── __init__.py               # API package
+│   │       ├── well_production_routes.py # FastAPI routes for well production
+│   │       ├── schemas.py                # Pydantic schemas for API
+│   │       ├── mappers.py                # Data mappers for API layer
+│   │       └── dependencies.py           # API dependency injection
 │   │
-│   └── shared/                           # SHARED LAYER (Common Utilities)
-│       ├── __init__.py                   # Shared package initializer
-│       ├── utils/                        # Utility Functions
-│       │   └── __init__.py               # Utils package
-│       └── config/                       # Configuration Management
-│           └── __init__.py               # Config package
+│   ├── shared/                           # SHARED LAYER (Common Utilities)
+│   │   ├── __init__.py                   # Shared package initializer
+│   │   ├── dependencies.py               # Dependency injection configuration
+│   │   ├── exceptions.py                 # Custom exception classes
+│   │   ├── responses.py                  # Standard API response models
+│   │   ├── job_manager.py                # Background job management
+│   │   ├── batch_processor.py            # Batch processing utilities
+│   │   ├── config/                       # Configuration Management
+│   │   │   ├── __init__.py               # Config package
+│   │   │   ├── settings.py               # Application settings
+│   │   │   └── datasets_config.py        # Dataset configuration
+│   │   └── utils/                        # Utility Functions
+│   │       ├── __init__.py               # Utils package
+│   │       └── sql_loader.py             # SQL file loading utility
+│   │
+│   ├── api/                              # Additional API Components
+│   │   └── __init__.py                   # API package
+│   │
+│   └── temp/                             # Temporary Processing Files
+│       └── (temporary files)
 │
 ├── frontend/                             # API CLIENT FOR TESTING
 │   ├── __init__.py                       # Frontend package initializer
@@ -94,12 +112,25 @@ react-fast-v9/
 ├── temp/                               # TEMPORARY FILES
 │   └── (temporary processing files)
 │
+├── downloads/                          # DOWNLOAD STORAGE
+│   └── (downloaded files)
+│
+├── logs/                               # APPLICATION LOGS
+│   └── wells_api.log                   # Application log file
+│
+├── tests/                              # TEST SUITE
+│   └── (test files)
+│
 ├── requirements.txt                     # Python Dependencies
-├── README.md                           # Project Documentation
+├── pyproject.toml                      # Project Configuration
+├── uv.lock                            # UV Package Lock File
+├── run.py                             # Application runner script
+├── jobs.json                          # Job configuration
+├── README.md                          # Project Documentation
 ├── developer_guide.md                 # Development Guidelines
 ├── user_guide.md                      # User Documentation
-├── pyproject.toml                     # Project Configuration
-└── uv.lock                            # UV Package Lock File
+└── SQL_QUERIES_DESIGN.md             # SQL Design Documentation
+```
 
 ## 🚀 Features
 
@@ -108,7 +139,11 @@ react-fast-v9/
 - **Bulk Operations**: Efficient batch processing
 - **Professional API**: RESTful endpoints with proper error handling
 - **Health Checks**: Production-ready monitoring
-- **Logging**: Comprehensive logging system
+- **Comprehensive Logging**: File and console logging with rotation
+- **Background Jobs**: Asynchronous job processing
+- **Batch Processing**: Efficient data processing utilities
+- **Dependency Injection**: Clean dependency management
+- **Exception Handling**: Comprehensive error handling system
 
 ## 📊 Storage Strategy
 
@@ -146,7 +181,12 @@ react-fast-v9/
 
 3. **Run the application**:
    ```bash
-   uvicorn src.main:app --reload --port 8000
+   uvicorn src.main:app --reload --port 8080
+   ```
+
+   Or use the provided runner script:
+   ```bash
+   python run.py
    ```
 
 ## 📚 API Endpoints
@@ -156,14 +196,15 @@ react-fast-v9/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/` | API information and available endpoints |
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Health check with service status |
 | `GET` | `/docs` | Interactive API documentation |
 
 ### Well Production Management
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v1/wells/import` | Import well data from JSON |
+| `POST` | `/api/v1/wells/import` | Import well data from JSON with filters |
+| `GET` | `/api/v1/wells/import/trigger` | Simple import trigger endpoint |
 | `GET` | `/api/v1/wells/download` | Download CSV export |
 | `GET` | `/api/v1/wells/stats` | Get database statistics |
 | `GET` | `/api/v1/wells/well/{well_code}` | Get specific well data |
@@ -173,22 +214,32 @@ react-fast-v9/
 
 ### Import Data
 ```bash
-curl -X POST http://localhost:8000/api/v1/wells/import
+curl -X POST http://localhost:8080/api/v1/wells/import
+```
+
+### Simple Import Trigger
+```bash
+curl http://localhost:8080/api/v1/wells/import/trigger
 ```
 
 ### Download CSV
 ```bash
-curl -O http://localhost:8000/api/v1/wells/download
+curl -O http://localhost:8080/api/v1/wells/download
 ```
 
 ### Get Statistics
 ```bash
-curl http://localhost:8000/api/v1/wells/stats
+curl http://localhost:8080/api/v1/wells/stats
 ```
 
 ### Query Specific Well
 ```bash
-curl http://localhost:8000/api/v1/wells/well/59806
+curl http://localhost:8080/api/v1/wells/well/59806
+```
+
+### Query Field Data
+```bash
+curl http://localhost:8080/api/v1/wells/field/8908
 ```
 
 ## 🏭 Production Considerations
@@ -196,18 +247,27 @@ curl http://localhost:8000/api/v1/wells/well/59806
 ### Performance Optimizations
 - **Bulk Operations**: Uses batch processing for large datasets
 - **Connection Pooling**: Efficient database connection management
-- **Async Processing**: Non-blocking I/O operations
+- **Async Processing**: Non-blocking I/O operations with FastAPI
 - **Indexing**: Optimized database indexes for common queries
+- **Background Jobs**: Asynchronous job processing system
 
 ### Scalability
 - **Local-First**: Designed for local deployment with massive datasets
 - **Memory Efficient**: Streaming processing for large files
 - **Concurrent Storage**: Parallel writes to DuckDB and CSV
+- **Batch Processing**: Configurable batch sizes for optimal performance
 
-### Monitoring
+### Monitoring & Observability
 - **Health Checks**: `/health` endpoint for monitoring
-- **Logging**: Structured logging with different levels
-- **Error Handling**: Comprehensive error responses
+- **Structured Logging**: File and console logging with different levels
+- **Error Handling**: Comprehensive error responses with proper HTTP status codes
+- **Job Tracking**: Background job status monitoring
+
+### Configuration Management
+- **Environment Variables**: Configurable via environment variables
+- **Settings Management**: Centralized configuration with Pydantic
+- **CORS Configuration**: Configurable CORS settings for production
+- **Database Paths**: Configurable data storage locations
 
 ## 🔒 Data Schema
 
@@ -239,16 +299,34 @@ Run the application and test endpoints:
 
 ```bash
 # Start the server
-uvicorn src.main:app --reload
+uvicorn src.main:app --reload --port 8080
 
 # Test import
-curl -X POST http://localhost:8000/api/v1/wells/import
+curl -X POST http://localhost:8080/api/v1/wells/import
 
 # Check statistics
-curl http://localhost:8000/api/v1/wells/stats
+curl http://localhost:8080/api/v1/wells/stats
 
 # Download data
-curl -O http://localhost:8000/api/v1/wells/download
+curl -O http://localhost:8080/api/v1/wells/download
+
+# Test specific well
+curl http://localhost:8080/api/v1/wells/well/59806
+
+# Test field data
+curl http://localhost:8080/api/v1/wells/field/8908
+```
+
+### Frontend Testing
+Use the provided frontend test clients:
+
+```bash
+cd frontend
+python test_health.py
+python test_import.py
+python test_stats.py
+python test_well_59806.py
+python test_field_8908.py
 ```
 
 ## 📁 Data Files
@@ -256,14 +334,36 @@ curl -O http://localhost:8000/api/v1/wells/download
 - **Input**: `external/mocked_response.json` - Sample well production data
 - **Output**: `data/wells_prod.csv` - Exported CSV file
 - **Database**: `data/wells_production.duckdb` - DuckDB file
+- **SQL**: `src/infrastructure/operations/wells.sql` - Database queries
+- **Logs**: `logs/wells_api.log` - Application logs
+
+## 🔧 Configuration
+
+### Environment Variables
+- `APP_ENV`: Application environment (development/production)
+- `APP_DEBUG`: Debug mode flag
+- `API_BASE_URL`: External API base URL
+- `API_KEY`: External API key
+- `DATA_ROOT_DIR_NAME`: Data directory name
+- `DUCKDB_FILENAME`: DuckDB file name
+- `CSV_EXPORT_FILENAME`: CSV export file name
+- `CORS_ALLOWED_ORIGINS`: Allowed CORS origins
+
+### Key Configuration Files
+- `src/shared/config/settings.py`: Application settings
+- `src/shared/config/datasets_config.py`: Dataset configurations
+- `src/shared/dependencies.py`: Dependency injection setup
+- `pyproject.toml`: Project metadata and dependencies
 
 ## 🤝 Contributing
 
 1. Follow the hexagonal architecture patterns
 2. Maintain separation of concerns between layers
-3. Write descriptive commit messages
-4. Ensure proper error handling
-5. Add logging for important operations
+3. Use dependency injection for loose coupling
+4. Write descriptive commit messages
+5. Ensure proper error handling and logging
+6. Add comprehensive tests for new features
+7. Update documentation for API changes
 
 ## 📄 License
 
@@ -273,5 +373,7 @@ This project is licensed under the MIT License.
 
 - [Developer Guide](developer_guide.md) - Detailed development instructions
 - [User Guide](user_guide.md) - End-user documentation
+- [SQL Queries Design](SQL_QUERIES_DESIGN.md) - Database design documentation
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [DuckDB Documentation](https://duckdb.org/docs/) 
+- [DuckDB Documentation](https://duckdb.org/docs/)
+- [Pydantic Documentation](https://docs.pydantic.dev/) 

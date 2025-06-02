@@ -100,7 +100,7 @@ class WellProductionImportService:
                 )
 
             # Process in batches
-            batch_size = 1000
+            batch_size = 100000
             for i in range(0, len(data), batch_size):
                 batch = data[i:i + batch_size]
                 

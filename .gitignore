@@ -28,16 +28,12 @@ MANIFEST
 *.swo
 
 # Temporary files
-frontend/frontend_dev_plan.md
-frontend/
+frontend/front_dev_plan.md
 
 # Database
 data/db.duckdb
 external/mocked_response.json
 data/wells_production.duckdb
-
-# Ignore jobs.json in root directory
-!jobs.json
 
 
 # Downloads (exclude directory but keep it in git)
@@ -75,3 +71,5 @@ test_venv/
 *.bak
 *.tmp
 *.temp
+frontend/front_dev_plan.md
+jobs.json
