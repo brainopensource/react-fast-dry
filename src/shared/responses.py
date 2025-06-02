@@ -5,6 +5,8 @@ Provides typed, structured responses for success and error cases.
 from typing import Optional, Dict, Any, Generic, TypeVar, List, Union
 from pydantic import BaseModel
 from datetime import datetime
+from fastapi import status # Added
+from fastapi.responses import JSONResponse # Added
 from .exceptions import ApplicationException, ErrorCode
 
 T = TypeVar('T')
@@ -56,6 +58,7 @@ class BatchResult(BaseModel):
     errors: List[ErrorDetail] = []
     execution_time_ms: float
     memory_usage_mb: Optional[float] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class PaginatedResponse(BaseModel, Generic[T]):
@@ -95,9 +98,9 @@ class ResponseBuilder:
         exception: ApplicationException,
         request_id: Optional[str] = None,
         trace_id: Optional[str] = None
-    ) -> ErrorResponse:
+    ) -> JSONResponse: # Return type changed
         """Build an error response from an exception"""
-        return ErrorResponse(
+        error_payload = ErrorResponse(
             error=ErrorDetail(
                 error_code=exception.error_code.value,
                 message=exception.message,
@@ -108,6 +111,10 @@ class ResponseBuilder:
                 request_id=request_id
             ),
             trace_id=trace_id
+        )
+        return JSONResponse(
+            status_code=exception.http_status_code,
+            content=error_payload.model_dump(mode='json')
         )
     
     @staticmethod

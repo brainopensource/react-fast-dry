@@ -16,22 +16,23 @@ CREATE TABLE IF NOT EXISTS well_production (
     partition_0 VARCHAR NOT NULL,
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
-    PRIMARY KEY (well_code, production_period)
+    PRIMARY KEY (well_code, field_code, production_period)
 );
 
 -- name: create_indexes
 CREATE INDEX IF NOT EXISTS idx_field_code ON well_production(field_code);
 CREATE INDEX IF NOT EXISTS idx_well_code ON well_production(well_code);
 CREATE INDEX IF NOT EXISTS idx_production_period ON well_production(production_period);
+CREATE INDEX IF NOT EXISTS idx_composite_key ON well_production(well_code, field_code, production_period);
 
 -- name: get_by_well_code
-SELECT * FROM well_production WHERE well_code = ? LIMIT 1;
+SELECT * FROM well_production WHERE well_code = ? ORDER BY production_period DESC;
 
 -- name: get_by_field_code
 SELECT * FROM well_production WHERE field_code = ?;
 
 -- name: get_all
-SELECT * FROM well_production ORDER BY well_code, production_period;
+SELECT * FROM well_production ORDER BY well_code, field_code, production_period;
 
 -- name: count_all
 SELECT COUNT(*) FROM well_production;
@@ -57,6 +58,13 @@ SELECT * FROM well_production WHERE well_name ILIKE ?;
 
 -- name: get_by_code_and_period
 SELECT * FROM well_production WHERE well_code = ? AND production_period = ?;
+
+-- name: check_exists
+SELECT COUNT(*) FROM well_production WHERE well_code = ? AND field_code = ? AND production_period = ?;
+
+-- name: get_existing_records
+SELECT well_code, field_code, production_period FROM well_production 
+WHERE (well_code, field_code, production_period) IN (VALUES (?, ?, ?));
 
 -- name: insert_from_temp
 INSERT INTO well_production SELECT * FROM temp_df;

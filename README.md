@@ -2,7 +2,7 @@
 
 A high-performance FastAPI application for managing millions of well production records using hexagonal architecture, DDD principles, and dual storage (DuckDB + CSV).
 
-## 🏗️ Architecture
+## 🏗️ App Architecture
 
 This project follows **Hexagonal Architecture** (Ports and Adapters) with **Domain-Driven Design** principles:
 
