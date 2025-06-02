@@ -28,8 +28,7 @@ MANIFEST
 *.swo
 
 # Temporary files
-frontend/frontend_dev_plan.md
-frontend/
+frontend/front_dev_plan.md
 
 # Database
 data/db.duckdb
@@ -72,3 +71,5 @@ test_venv/
 *.bak
 *.tmp
 *.temp
+frontend/front_dev_plan.md
+jobs.json
