@@ -1,10 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 import requests
 import threading
 import json
 import time
-import os
 
 # --- Model Component ---
 class ApiModel:
@@ -64,28 +63,6 @@ class ApiModel:
         """Fetches well data by well code from the API."""
         return self._make_request('GET', f'/api/v1/wells/well/{well_code}')
 
-    def download_csv(self, endpoint, save_path, progress_callback=None):
-        """Download CSV file from endpoint with progress callback."""
-        # Ensure download directory exists
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        url = f"{self.BASE_URL}{endpoint}"
-        try:
-            with requests.get(url, stream=True, timeout=60) as r:
-                r.raise_for_status()
-                total = int(r.headers.get('content-length', 0))
-                downloaded = 0
-                chunk_size = 8192
-                with open(save_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=chunk_size):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
-                            if progress_callback and total:
-                                progress_callback(downloaded / total * 100)
-            return r.status_code, save_path
-        except requests.exceptions.RequestException as e:
-            return None, str(e)
-
 
 # --- View Component ---
 class HomeTabFrame(ttk.Frame):
@@ -139,7 +116,8 @@ class SyncTriggerTabFrame(ttk.Frame):
         scrollbar = ttk.Scrollbar(text_frame, command=self.text_widget.yview)
         scrollbar.pack(side='right', fill='y')
         self.text_widget.configure(yscrollcommand=scrollbar.set)
-          # Initial message
+        
+        # Initial message
         self.text_widget.insert(tk.END, "Response will be shown here after triggering import.\n")
         self.text_widget.config(state=tk.DISABLED)
 
@@ -151,19 +129,17 @@ class SyncTriggerTabFrame(ttk.Frame):
 
     def append_response(self, text):
         """Appends text to the response text widget."""
-        if self.text_widget:
-            self.text_widget.config(state=tk.NORMAL)
-            self.text_widget.insert(tk.END, text)
-            self.text_widget.see(tk.END)  # Scroll to bottom
-            self.text_widget.config(state=tk.DISABLED)
+        self.text_widget.config(state=tk.NORMAL)
+        self.text_widget.insert(tk.END, text)
+        self.text_widget.see(tk.END)  # Scroll to bottom
+        self.text_widget.config(state=tk.DISABLED)
 
     def set_response(self, text):
         """Sets the text in the response text widget."""
-        if self.text_widget:
-            self.text_widget.config(state=tk.NORMAL)
-            self.text_widget.delete(1.0, tk.END)
-            self.text_widget.insert(tk.END, text)
-            self.text_widget.config(state=tk.DISABLED)
+        self.text_widget.config(state=tk.NORMAL)
+        self.text_widget.delete(1.0, tk.END)
+        self.text_widget.insert(tk.END, text)
+        self.text_widget.config(state=tk.DISABLED)
 
 
 class WellLookupTabFrame(ttk.Frame):
@@ -343,51 +319,6 @@ class WellLookupTabFrame(ttk.Frame):
             self.info_text.config(state=tk.DISABLED)
 
 
-class DownloadTabFrame(ttk.Frame):
-    """View for downloading CSV files."""
-    def __init__(self, parent, controller):
-        super().__init__(parent)
-        self.controller = controller
-        self.save_path = None
-        self.progress = None
-        self.status_label = None
-        self.path_entry = None  # show selected path
-        self.create_widgets()
-
-    def create_widgets(self):
-        # Path selection
-        path_frame = ttk.Frame(self)
-        path_frame.pack(pady=5, fill='x', padx=10)
-        self.path_entry = ttk.Entry(path_frame, width=50)
-        self.path_entry.pack(side='left', fill='x', expand=True)
-        ttk.Button(path_frame, text='Browse...', command=self.browse_file).pack(side='left')
-
-        # Download
-        ttk.Button(self, text='Download CSV', command=self.controller.trigger_wells_download).pack(pady=10)
-        self.progress = ttk.Progressbar(self, orient='horizontal', length=400, mode='determinate')
-        self.progress.pack(pady=10)
-        self.status_label = ttk.Label(self, text='Ready to download', foreground='blue')
-        self.status_label.pack(pady=5)
-
-    def browse_file(self):
-        file_path = filedialog.asksaveasfilename(defaultextension='.csv', filetypes=[('CSV','*.csv')], title='Save CSV as')
-        if file_path:
-            self.save_path = file_path
-            self.path_entry.delete(0, tk.END)
-            self.path_entry.insert(0, file_path)
-
-    def update_status(self, message, is_error=False):
-        """Updates the status message displayed to the user."""
-        if self.status_label:
-            color = "red" if is_error else "blue"
-            self.status_label.config(text=message, foreground=color)
-
-    def update_progress(self, progress_value):
-        """Updates the progress bar with the given value (0-100)."""
-        if self.progress:
-            self.progress['value'] = progress_value
-
-
 class AppView(tk.Tk):
     """
     Main Application View.
@@ -412,12 +343,9 @@ class AppView(tk.Tk):
         self.well_lookup_tab = WellLookupTabFrame(self.notebook, self.controller)
         self.notebook.add(self.well_lookup_tab, text='Well Lookup')
 
-        self.download_tab = DownloadTabFrame(self.notebook, self.controller)
-        self.notebook.add(self.download_tab, text='Download')
-
         # Link controller to views for explicit communication
         print("Setting view references in AppView")
-        self.controller.set_view_references(self.sync_tab, self.well_lookup_tab, self.download_tab)
+        self.controller.set_view_references(self.sync_tab, self.well_lookup_tab)
         print("View references set in AppView")
 
 
@@ -435,22 +363,19 @@ class AppController:
         # Initialize references to specific tab views - will be set by AppView
         self.sync_view = None
         self.well_lookup_view = None
-        self.download_view = None
         print("Controller view references initialized to None")
         
         # Create the view AFTER initializing the references
         self.view = AppView(self)
         print("AppView instantiated in AppController")
 
-    def set_view_references(self, sync_view, well_lookup_view, download_view):
+    def set_view_references(self, sync_view, well_lookup_view):
         """Sets references to the specific tab views for direct updates."""
         print("Setting view references in AppController")
         self.sync_view = sync_view
         self.well_lookup_view = well_lookup_view
-        self.download_view = download_view
         print(f"Sync view set: {self.sync_view is not None}")
         print(f"Well Lookup view set: {self.well_lookup_view is not None}")
-        print(f"Download view set: {self.download_view is not None}")
         print("View references set in AppController")
 
     def run(self):
@@ -599,27 +524,6 @@ class AppController:
                 self.well_lookup_view.clear_display()
         
         self.view.after(0, update_ui)
-
-    # --- Controller methods for Download Tab ---
-    def trigger_wells_download(self):
-        if self.download_view:
-            path = getattr(self.download_view, 'save_path', None)
-            if not path:
-                self.download_view.update_status("Please select a save location first", is_error=True)
-                return
-            self.download_view.update_status("Starting download...", is_error=False)
-            self.download_view.update_progress(0)
-            threading.Thread(target=self._perform_download, daemon=True).start()
-
-    def _perform_download(self):
-        save_path = self.download_view.save_path
-        def progress_cb(p):
-            self.view.after(0, lambda: self.download_view.update_progress(p))
-        status, result = self.model.download_csv('/api/v1/wells/download', save_path, progress_cb)
-        if status == 200:
-            self.view.after(0, lambda: self.download_view.update_status(f"Download complete: {result}", is_error=False))
-        else:
-            self.view.after(0, lambda: self.download_view.update_status(f"Download failed: {result}", is_error=True))
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import List, Optional, Set, Tuple
 from datetime import datetime
 import asyncio
+import duckdb
+import os
 
 from ...domain.entities.well_production import WellProduction
 from ...domain.repositories.well_production_repository import WellProductionRepository
@@ -10,6 +12,12 @@ from .duckdb_well_production_repository import DuckDBWellProductionRepository
 
 class CompositeWellProductionRepository(WellProductionRepository):
     """Composite repository that handles both CSV and DuckDB storage."""
+    
+    # Bulk processing configuration
+    BATCH_SIZE = 100_000  # Number of records per batch
+    MEMORY_LIMIT = "6GB"  # Leave 2GB for system and other processes
+    THREADS = 4  # Number of threads for parallel processing
+    TEMP_DIR = Path("temp")  # Directory for temporary files during export
     
     def __init__(
         self, 
@@ -22,12 +30,14 @@ class CompositeWellProductionRepository(WellProductionRepository):
         self.downloads_dir = downloads_dir
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
+        self.TEMP_DIR.mkdir(parents=True, exist_ok=True)
         
         # Database file in data directory
         self.duckdb_repo = DuckDBWellProductionRepository(db_path=self.data_dir / duckdb_filename)
         
         # CSV files in downloads directory
         self.csv_path = self.downloads_dir / csv_filename
+        self.duckdb_path = self.data_dir / duckdb_filename
     
     async def _ensure_csv_initialized(self) -> None:
         """Ensure CSV file exists and has proper headers."""
@@ -112,10 +122,122 @@ class CompositeWellProductionRepository(WellProductionRepository):
         return await self.duckdb_repo.count()
     
     async def export_to_csv(self) -> Path:
-        """Export all data from DuckDB to CSV for download."""
-        well_productions = await self.duckdb_repo.get_all()
-        await self._bulk_save_to_csv(well_productions, overwrite=True)
-        return self.csv_path
+        """Export all data from DuckDB to CSV for download using DuckDB's native export."""
+        try:
+            # Connect to the DuckDB database with optimized settings
+            conn = duckdb.connect(str(self.duckdb_path))
+            
+            # Configure DuckDB for optimal performance
+            conn.execute(f"PRAGMA memory_limit='{self.MEMORY_LIMIT}'")
+            conn.execute(f"PRAGMA threads={self.THREADS}")
+            
+            # Get total count for progress tracking
+            total_count = conn.execute("SELECT COUNT(*) FROM well_production").fetchone()[0]
+            
+            if total_count <= self.BATCH_SIZE:
+                # For smaller datasets, export directly with optimized settings
+                conn.execute(f"""
+                    COPY (
+                        SELECT 
+                            field_code::VARCHAR as field_code,
+                            field_name,
+                            well_code::VARCHAR as well_code,
+                            well_reference,
+                            well_name,
+                            production_period,
+                            days_on_production::VARCHAR as days_on_production,
+                            oil_production_kbd::VARCHAR as oil_production_kbd,
+                            gas_production_mmcfd::VARCHAR as gas_production_mmcfd,
+                            liquids_production_kbd::VARCHAR as liquids_production_kbd,
+                            water_production_kbd::VARCHAR as water_production_kbd,
+                            data_source,
+                            source_data,
+                            partition_0,
+                            created_at::VARCHAR as created_at,
+                            updated_at::VARCHAR as updated_at
+                        FROM well_production
+                        ORDER BY well_code, field_code, production_period
+                    ) TO '{self.csv_path}' (
+                        HEADER, 
+                        DELIMITER ',',
+                        QUOTE '"',
+                        ESCAPE '"',
+                        NULL 'NULL',
+                        FORCE_QUOTE (field_name, well_reference, well_name, production_period, data_source, source_data, partition_0)
+                    );
+                """)
+            else:
+                # For larger datasets, use parallel export with temporary files
+                # First, write headers
+                with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
+                    writer.writeheader()
+                
+                # Calculate number of chunks for parallel processing
+                num_chunks = (total_count + self.BATCH_SIZE - 1) // self.BATCH_SIZE
+                temp_files = []
+                
+                # Create temporary files for parallel export
+                for i in range(num_chunks):
+                    temp_file = self.TEMP_DIR / f"temp_export_{i}.csv"
+                    temp_files.append(temp_file)
+                    
+                    # Export chunk to temporary file
+                    conn.execute(f"""
+                        COPY (
+                            SELECT 
+                                field_code::VARCHAR as field_code,
+                                field_name,
+                                well_code::VARCHAR as well_code,
+                                well_reference,
+                                well_name,
+                                production_period,
+                                days_on_production::VARCHAR as days_on_production,
+                                oil_production_kbd::VARCHAR as oil_production_kbd,
+                                gas_production_mmcfd::VARCHAR as gas_production_mmcfd,
+                                liquids_production_kbd::VARCHAR as liquids_production_kbd,
+                                water_production_kbd::VARCHAR as water_production_kbd,
+                                data_source,
+                                source_data,
+                                partition_0,
+                                created_at::VARCHAR as created_at,
+                                updated_at::VARCHAR as updated_at
+                            FROM well_production
+                            ORDER BY well_code, field_code, production_period
+                            LIMIT {self.BATCH_SIZE} OFFSET {i * self.BATCH_SIZE}
+                        ) TO '{temp_file}' (
+                            HEADER FALSE, 
+                            DELIMITER ',',
+                            QUOTE '"',
+                            ESCAPE '"',
+                            NULL 'NULL',
+                            FORCE_QUOTE (field_name, well_reference, well_name, production_period, data_source, source_data, partition_0)
+                        );
+                    """)
+                
+                # Combine temporary files into final CSV
+                with open(self.csv_path, 'ab') as outfile:
+                    for temp_file in temp_files:
+                        with open(temp_file, 'rb') as infile:
+                            outfile.write(infile.read())
+                        # Clean up temporary file
+                        temp_file.unlink()
+            
+            conn.close()
+            return self.csv_path
+            
+        except Exception as e:
+            # Clean up any temporary files in case of error
+            for temp_file in self.TEMP_DIR.glob("temp_export_*.csv"):
+                try:
+                    temp_file.unlink()
+                except:
+                    pass
+                    
+            # Fallback to the old method if DuckDB export fails
+            well_productions = await self.duckdb_repo.get_all()
+            await self._bulk_save_to_csv(well_productions, overwrite=True)
+            return self.csv_path
     
     async def _save_to_csv(self, well_production: WellProduction) -> None:
         """Save a single well production record to CSV, checking for duplicates."""
@@ -148,51 +270,18 @@ class CompositeWellProductionRepository(WellProductionRepository):
         return False
     
     async def _bulk_save_to_csv(self, well_productions: List[WellProduction], overwrite: bool = False) -> None:
-        """Bulk save well production records to CSV, avoiding duplicates unless overwriting."""
-        await self._ensure_csv_initialized()  # Ensure CSV exists
-        
-        if overwrite:
-            # When overwriting, just write all records
-            mode = 'w'
-        else:
-            # When appending, filter out existing records
-            well_productions = await self._filter_csv_duplicates(well_productions)
-            if not well_productions:
-                return  # All records were duplicates
-            mode = 'a'
-        
+        """Save multiple well production records to CSV efficiently."""
+        if not well_productions:
+            return
+
+        mode = 'w' if overwrite else 'a'
         with open(self.csv_path, mode, newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
-            if mode == 'w':  # Only write header when overwriting
+            if overwrite:
                 writer.writeheader()
             
-            for well_production in well_productions:
-                writer.writerow(self._entity_to_row(well_production))
-    
-    async def _filter_csv_duplicates(self, well_productions: List[WellProduction]) -> List[WellProduction]:
-        """Filter out records that already exist in CSV."""
-        await self._ensure_csv_initialized()  # Ensure CSV exists
-        
-        # Get existing composite keys from CSV
-        existing_keys: Set[Tuple[int, int, str]] = set()
-        
-        with open(self.csv_path, 'r', newline='', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    key = (int(row['well_code']), int(row['field_code']), row['production_period'])
-                    existing_keys.add(key)
-                except (ValueError, KeyError):
-                    continue  # Skip malformed rows
-        
-        # Filter out duplicates
-        unique_records = []
-        for wp in well_productions:
-            composite_key = (wp.well_code, wp.field_code, wp.production_period)
-            if composite_key not in existing_keys:
-                unique_records.append(wp)
-        
-        return unique_records
+            # Write all rows at once using writerows
+            writer.writerows([self._entity_to_row(wp) for wp in well_productions])
     
     def _get_fieldnames(self) -> List[str]:
         """Get the fieldnames for the CSV file."""
