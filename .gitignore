@@ -36,9 +36,6 @@ data/db.duckdb
 external/mocked_response.json
 data/wells_production.duckdb
 
-# Ignore jobs.json in root directory
-!jobs.json
-
 
 # Downloads (exclude directory but keep it in git)
 downloads/*
