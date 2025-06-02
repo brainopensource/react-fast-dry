@@ -59,7 +59,7 @@ class TestDataHelper:
             "total_records": 1000,
             "storage_info": {
                 "primary": "DuckDB",
-                "secondary": "CSV",
+                "export": "On-demand CSV",
                 "performance": "Optimized"
             }
         }
@@ -79,7 +79,7 @@ class MockDataGenerator:
                 "source": "mock_data.json",
                 "storage_info": {
                     "primary": "DuckDB database updated",
-                    "secondary": "CSV file generated"
+                    "export": "CSV available on-demand"
                 }
             }
         }
@@ -128,7 +128,7 @@ class ResponseValidator:
             return False
         
         storage_info = response_data.get("storage_info", {})
-        storage_keys = ["primary", "secondary"]
+        storage_keys = ["primary"]  # Only primary storage is required now
         return all(key in storage_info for key in storage_keys)
     
     @staticmethod

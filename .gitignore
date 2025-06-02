@@ -73,3 +73,5 @@ test_venv/
 *.temp
 frontend/front_dev_plan.md
 jobs.json
+external/mocked_response_1M.json
+external/mocked_response_original.json

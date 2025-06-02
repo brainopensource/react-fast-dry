@@ -35,10 +35,11 @@ class JobManager:
         self.jobs_file = jobs_file
         self._lock = asyncio.Lock()
         self.job_timeout_seconds = job_timeout_seconds
-        self._load_jobs()
-        self._cleanup_stale_jobs()
+        self._load_jobs_sync()  # Initial load is sync since we're in __init__
+        self._cleanup_stale_jobs_sync()  # Initial cleanup is sync
 
-    def _load_jobs(self):
+    def _load_jobs_sync(self):
+        """Synchronous helper for loading jobs from file."""
         try:
             if os.path.exists(self.jobs_file):
                 with open(self.jobs_file, 'r') as f:
@@ -55,7 +56,12 @@ class JobManager:
             logger.error(f"Error loading jobs file: {str(e)}")
             self.jobs = {}
 
-    def _save_jobs(self):
+    async def _load_jobs(self):
+        """Asynchronous job loading."""
+        await asyncio.to_thread(self._load_jobs_sync)
+
+    def _save_jobs_sync(self):
+        """Synchronous helper for saving jobs to file."""
         with open(self.jobs_file, 'w') as f:
             # Convert Job objects to dict and handle JobStatus enum serialization
             jobs_dict = {}
@@ -65,8 +71,12 @@ class JobManager:
                 jobs_dict[k] = job_dict
             json.dump(jobs_dict, f, indent=2)
 
-    def _cleanup_stale_jobs(self):
-        """Clean up stale jobs that have been running too long"""
+    async def _save_jobs(self):
+        """Asynchronous job saving."""
+        await asyncio.to_thread(self._save_jobs_sync)
+
+    def _cleanup_stale_jobs_sync(self):
+        """Synchronous helper for cleaning up stale jobs."""
         current_time = time.time()
         for job_id, job in list(self.jobs.items()):
             # Check for running jobs that haven't been updated
@@ -84,13 +94,17 @@ class JobManager:
                     job.completed_at = current_time
 
         # Save changes after cleanup
-        self._save_jobs()
+        self._save_jobs_sync()
+
+    async def _cleanup_stale_jobs(self):
+        """Clean up stale jobs that have been running too long"""
+        await asyncio.to_thread(self._cleanup_stale_jobs_sync)
 
     async def create_job(self) -> Optional[str]:
         """Create a new job if no job is running"""
         async with self._lock:
             # Clean up stale jobs before creating new one
-            self._cleanup_stale_jobs()
+            await self._cleanup_stale_jobs()
             
             # Check if any job is running
             running_job = self._get_running_job()
@@ -107,7 +121,7 @@ class JobManager:
                 last_updated_at=current_time
             )
             self.jobs[job_id] = job
-            self._save_jobs()
+            await self._save_jobs()
             return job_id
 
     def _get_running_job(self) -> Optional[Job]:
@@ -138,7 +152,7 @@ class JobManager:
 
             # Update last_updated_at timestamp
             job.last_updated_at = current_time
-            self._save_jobs()
+            await self._save_jobs()
 
     def get_job(self, job_id: str) -> Optional[Job]:
         """Get job by ID"""
@@ -151,7 +165,7 @@ class JobManager:
             return None
         return asdict(job)
 
-    def cleanup_old_jobs(self, max_age_days: int = 7):
+    async def cleanup_old_jobs(self, max_age_days: int = 7):
         """Clean up old completed/failed jobs"""
         current_time = time.time()
         max_age_seconds = max_age_days * 24 * 3600
@@ -161,4 +175,4 @@ class JobManager:
                 if current_time - job.completed_at > max_age_seconds:
                     del self.jobs[job_id]
         
-        self._save_jobs() 
+        await self._save_jobs() 

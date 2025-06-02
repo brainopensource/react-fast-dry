@@ -18,7 +18,7 @@ from ..application.services.well_production_import_service import WellProduction
 from ..application.services.well_production_query_service import WellProductionQueryService
 
 # Infrastructure imports
-from ..infrastructure.repositories.composite_well_production_repository import CompositeWellProductionRepository
+from ..infrastructure.repositories.duckdb_well_production_repository import DuckDBWellProductionRepository
 from ..infrastructure.adapters.external_api_adapter import ExternalApiAdapter
 # from ..infrastructure.db.duckdb_repo import DuckDBWellRepo # Example, not used yet
 
@@ -70,15 +70,16 @@ class DependencyContainer:
         if 'repository' not in self._instances:
             repo_paths_config = self._config.get('repository_paths', {})
             data_dir = Path(repo_paths_config.get('data_dir', 'data')) # Default to 'data' if not configured
+            downloads_dir = Path(repo_paths_config.get('downloads_dir', 'downloads')) # Add downloads_dir
             duckdb_filename = repo_paths_config.get('duckdb_filename', 'wells_production.duckdb')
             csv_filename = repo_paths_config.get('csv_filename', 'wells_prod.csv')
 
-            # Pass configured paths to CompositeWellProductionRepository
-            # This requires CompositeWellProductionRepository to accept these as args.
-            self._instances['repository'] = CompositeWellProductionRepository(
-                data_dir=data_dir,
-                duckdb_filename=duckdb_filename, # Add this param
-                csv_filename=csv_filename # Add this param
+            # Use DuckDBWellProductionRepository instead of CompositeWellProductionRepository
+            # This provides fast DuckDB operations for imports and on-demand CSV export
+            self._instances['repository'] = DuckDBWellProductionRepository(
+                db_path=data_dir / duckdb_filename,
+                downloads_dir=downloads_dir,
+                csv_filename=csv_filename
             )
         return self._instances['repository']
     

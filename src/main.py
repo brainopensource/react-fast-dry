@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
         },
         "repository_paths": { # Add a new section for repository paths
             "data_dir": str(settings.DATA_ROOT_DIR),
+            "downloads_dir": "downloads",
             "duckdb_filename": settings.DUCKDB_FILENAME,
             "csv_filename": settings.CSV_EXPORT_FILENAME
         },
@@ -58,7 +59,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Well Production API",
-    description="High-performance API for managing millions of well production records using DuckDB and CSV storage",
+    description="High-performance API for managing millions of well production records using DuckDB with on-demand CSV export",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -88,7 +89,7 @@ async def root():
         "message": "Well Production API",
         "version": "1.0.0",
         "features": {
-            "storage": "Dual storage with DuckDB (primary) and CSV (export)",
+            "storage": "DuckDB primary storage with on-demand CSV export",
             "performance": "Optimized for millions of records",
             "architecture": "Hexagonal Architecture with DDD principles"
         },

@@ -31,6 +31,7 @@ from ...shared.exceptions import (
 )
 from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
 from ...shared.job_manager import JobManager, JobStatus
+from ...shared.utils.timing_decorator import async_timed
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ async def get_request_id(request: Request) -> str:
 
 
 @router.post("/import", status_code=status.HTTP_201_CREATED, response_model=SuccessResponse)
+@async_timed
 async def import_well_production(
     request: Request,
     filters: Optional[dict] = None,
@@ -105,7 +107,7 @@ async def import_well_production(
                     "data_status": data_status
                 },
                 "performance": {
-                    "execution_time_ms": execution_time_ms,
+                    "execution_time_seconds": execution_time_ms / 1000,
                     "memory_usage_mb": result.memory_usage_mb,
                     "throughput_records_per_second": (
                         new_records / (execution_time_ms / 1000)
@@ -115,7 +117,7 @@ async def import_well_production(
             },
             message=message,
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ValidationException as e:
@@ -205,15 +207,56 @@ async def run_import(job_id: str, service: WellProductionImportService):
         )
 
 @router.get("/import/status/{job_id}", status_code=status.HTTP_200_OK)
-async def get_import_status(job_id: str):
+async def get_import_status(
+    job_id: str,
+    request: Request,
+    request_id: str = Depends(get_request_id)
+):
     """Get the status of an import job"""
-    status = job_manager.get_job_status(job_id)
-    if not status:
-        return ResponseBuilder.error(
-            message="Job not found",
-            error_code="JOB_NOT_FOUND"
+    start_time = time.time()
+    
+    try:
+        job_status = job_manager.get_job_status(job_id)
+        if not job_status:
+            error = ValidationException(
+                message="Job not found",
+                field="job_id",
+                value=job_id,
+                status_code_override=status.HTTP_404_NOT_FOUND
+            )
+            return ResponseBuilder.error(error, request_id=request_id)
+        
+        # Calculate execution time based on job timing
+        execution_time_ms = None
+        if job_status.get('started_at') and job_status.get('completed_at'):
+            # Job is completed, calculate total execution time
+            execution_time_ms = (job_status['completed_at'] - job_status['started_at']) * 1000
+        elif job_status.get('started_at'):
+            # Job is still running, calculate current execution time
+            execution_time_ms = (time.time() - job_status['started_at']) * 1000
+        
+        # Add execution time to the job status data
+        enhanced_status = {
+            **job_status,
+            'execution_time_seconds': execution_time_ms / 1000
+        }
+        
+        response_execution_time_ms = (time.time() - start_time) * 1000
+        
+        return ResponseBuilder.success(
+            data=enhanced_status,
+            message="Job status retrieved successfully",
+            request_id=request_id,
+            execution_time_ms=response_execution_time_ms
         )
-    return ResponseBuilder.success(data=status)
+        
+    except Exception as e:
+        logger.error(f"Unexpected error getting job status {request_id}: {str(e)}", exc_info=True)
+        error = ApplicationException(
+            message=f"Unexpected error getting job status: {str(e)}",
+            cause=e
+        )
+        return ResponseBuilder.error(error, request_id=request_id)
 
 
 @router.get(
@@ -233,6 +276,7 @@ async def get_import_status(job_id: str):
         },
     }
 )
+@async_timed
 async def download_well_production(
     request: Request,
     service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated, assuming QueryService provides repository access
@@ -300,7 +344,7 @@ async def get_well_production_stats(
             data=stats,
             message="Statistics retrieved successfully",
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ApplicationException as e:
@@ -401,7 +445,7 @@ async def get_well_by_code(
             },
             message=f"Found {len(wells_data)} records for well {well_code}",
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ValidationException as e:
@@ -477,7 +521,7 @@ async def get_wells_by_field(
             },
             message=f"Found {len(wells)} wells for field {field_code}",
             request_id=request_id,
-            execution_time_ms=execution_time_ms
+            execution_time_seconds=execution_time_ms / 1000
         )
         
     except ValidationException as e:
