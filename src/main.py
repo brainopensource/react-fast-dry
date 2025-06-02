@@ -96,6 +96,7 @@ async def root():
         "endpoints": {
             "import": "/api/v1/wells/import (POST with filters)",
             "import_trigger": "/api/v1/wells/import/trigger (GET - simple trigger)",
+            "import_run": "/api/v1/wells/import/run (GET - OData API import with pagination)",
             "download": "/api/v1/wells/download",
             "stats": "/api/v1/wells/stats",
             "docs": "/docs"

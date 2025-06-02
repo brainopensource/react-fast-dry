@@ -203,6 +203,22 @@ class WellProductionImportService:
         # --- Field Name Mapping (Align with WellProduction entity and DB schema) ---
         # Source JSON field names (keys) to target DataFrame/DB column names (values)
         rename_map = {
+            # Direct mappings for fields that already match
+            "field_code": "field_code",
+            "_field_name": "field_name",  # Fix: underscore prefix in source
+            "well_code": "well_code", 
+            "_well_reference": "well_reference",  # Fix: underscore prefix in source
+            "well_name": "well_name",
+            "production_period": "production_period",
+            "days_on_production": "days_on_production",
+            "oil_production_kbd": "oil_production_kbd",
+            "gas_production_mmcfd": "gas_production_mmcfd",
+            "liquids_production_kbd": "liquids_production_kbd",
+            "water_production_kbd": "water_production_kbd",
+            "data_source": "data_source",
+            "source_data": "source_data", 
+            "partition_0": "partition_0",
+            # Legacy Pascal case mappings (in case data format changes)
             "FieldCode": "field_code",
             "FieldName": "field_name",
             "WellCode": "well_code",
