@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     DEBUG: bool = os.getenv("APP_DEBUG", "True").lower() == "true"
     
     # Application paths
-    APP_DIR: Path = Path(__file__).parent.parent.parent
+    APP_DIR: Path = Path(__file__).parent.parent.parent.parent
     # DATA_DIR: Path = APP_DIR / "data" # Commented out as DATA_ROOT_DIR will be used
     TEMP_DIR: Path = APP_DIR / "temp"
     SQL_DIR: Path = APP_DIR / "src" / "sql"
@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Configurable data paths
     DATA_ROOT_DIR: Path = APP_DIR / os.getenv("DATA_ROOT_DIR_NAME", "data")
     DUCKDB_FILENAME: str = os.getenv("DUCKDB_FILENAME", "wells_production.duckdb")
-    CSV_EXPORT_FILENAME: str = os.getenv("CSV_EXPORT_FILENAME", "wells_prod.csv")
+    CSV_EXPORT_FILENAME: str = os.getenv("CSV_EXPORT_FILENAME", "wells_production.csv")
     
     # Database
     DB_PATH: Path = DATA_ROOT_DIR / DUCKDB_FILENAME

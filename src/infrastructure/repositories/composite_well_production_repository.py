@@ -11,12 +11,31 @@ from .duckdb_well_production_repository import DuckDBWellProductionRepository
 class CompositeWellProductionRepository(WellProductionRepository):
     """Composite repository that handles both CSV and DuckDB storage."""
     
-    def __init__(self, data_dir: Path = Path("data"), duckdb_filename: str = "wells_production.duckdb", csv_filename: str = "wells_prod.csv"):
+    def __init__(
+        self, 
+        data_dir: Path = Path("data"), 
+        downloads_dir: Path = Path("downloads"),
+        duckdb_filename: str = "wells_production.duckdb", 
+        csv_filename: str = "wells_prod.csv"
+    ):
         self.data_dir = data_dir
-        self.data_dir.mkdir(parents=True, exist_ok=True) # Ensure parent dirs are created
-        self.csv_path = self.data_dir / csv_filename
-        # Ensure DuckDBWellProductionRepository receives the full path to the database file
-        self.duckdb_repo = DuckDBWellProductionRepository(db_path = self.data_dir / duckdb_filename)
+        self.downloads_dir = downloads_dir
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.downloads_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Database file in data directory
+        self.duckdb_repo = DuckDBWellProductionRepository(db_path=self.data_dir / duckdb_filename)
+        
+        # CSV files in downloads directory
+        self.csv_path = self.downloads_dir / csv_filename
+    
+    async def _ensure_csv_initialized(self) -> None:
+        """Ensure CSV file exists and has proper headers."""
+        if not self.csv_path.exists():
+            # Create empty CSV with headers
+            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
+                writer.writeheader()
     
     async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code from DuckDB (faster for queries)."""
@@ -50,39 +69,39 @@ class CompositeWellProductionRepository(WellProductionRepository):
         if not well_productions:
             return well_productions, 0, 0
         
-        # Filter out duplicates based on composite key (well_code, field_code, production_period)
-        unique_records = await self._filter_duplicates(well_productions)
-        duplicate_count = len(well_productions) - len(unique_records)
-        
-        if not unique_records:
-            return [], 0, duplicate_count  # All records were duplicates
+        try:
+            # First try to get existing records to check for duplicates
+            existing_keys = await self.duckdb_repo.get_existing_composite_keys(
+                [(wp.well_code, wp.field_code, wp.production_period) for wp in well_productions]
+            )
             
-        # Perform bulk operations concurrently
-        tasks = [
-            self._bulk_save_to_csv(unique_records),
-            self.duckdb_repo.bulk_insert(unique_records)
-        ]
-        await asyncio.gather(*tasks)
-        return unique_records, len(unique_records), duplicate_count
-    
-    async def _filter_duplicates(self, well_productions: List[WellProduction]) -> List[WellProduction]:
-        """Filter out records that already exist based on composite key."""
-        if not well_productions:
-            return well_productions
-        
-        # Get existing records from DuckDB
-        existing_keys = await self.duckdb_repo.get_existing_composite_keys(
-            [(wp.well_code, wp.field_code, wp.production_period) for wp in well_productions]
-        )
-        
-        # Filter out duplicates
-        unique_records = []
-        for wp in well_productions:
-            composite_key = (wp.well_code, wp.field_code, wp.production_period)
-            if composite_key not in existing_keys:
-                unique_records.append(wp)
-        
-        return unique_records
+            # Filter out duplicates
+            unique_records = []
+            duplicate_count = 0
+            for wp in well_productions:
+                composite_key = (wp.well_code, wp.field_code, wp.production_period)
+                if composite_key not in existing_keys:
+                    unique_records.append(wp)
+                else:
+                    duplicate_count += 1
+            
+            # Save unique records to DuckDB if any
+            if unique_records:
+                await self.duckdb_repo.bulk_insert(unique_records)
+            
+            # Always recreate CSV with all data from DuckDB, even if no new records
+            await self.export_to_csv()
+            
+            return unique_records, len(unique_records), duplicate_count
+            
+        except Exception as e:
+            # If there's an error (like table doesn't exist), initialize and try again
+            await self.duckdb_repo._initialize_database()
+            
+            # Since table was just created, all records are new
+            await self.duckdb_repo.bulk_insert(well_productions)
+            await self.export_to_csv()
+            return well_productions, len(well_productions), 0
     
     async def get_all(self) -> List[WellProduction]:
         """Get all well production data from DuckDB (faster for large datasets)."""
@@ -100,22 +119,19 @@ class CompositeWellProductionRepository(WellProductionRepository):
     
     async def _save_to_csv(self, well_production: WellProduction) -> None:
         """Save a single well production record to CSV, checking for duplicates."""
+        await self._ensure_csv_initialized()  # Ensure CSV exists
+        
         # Check if record already exists in CSV
         if await self._csv_record_exists(well_production):
             return  # Skip duplicate
         
-        file_exists = self.csv_path.exists()
-        
         with open(self.csv_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
-            if not file_exists:
-                writer.writeheader()
             writer.writerow(self._entity_to_row(well_production))
     
     async def _csv_record_exists(self, well_production: WellProduction) -> bool:
         """Check if a record already exists in CSV based on composite key."""
-        if not self.csv_path.exists():
-            return False
+        await self._ensure_csv_initialized()  # Ensure CSV exists
         
         composite_key = (well_production.well_code, well_production.field_code, well_production.production_period)
         
@@ -133,22 +149,21 @@ class CompositeWellProductionRepository(WellProductionRepository):
     
     async def _bulk_save_to_csv(self, well_productions: List[WellProduction], overwrite: bool = False) -> None:
         """Bulk save well production records to CSV, avoiding duplicates unless overwriting."""
+        await self._ensure_csv_initialized()  # Ensure CSV exists
+        
         if overwrite:
             # When overwriting, just write all records
             mode = 'w'
-            file_exists = False
         else:
             # When appending, filter out existing records
             well_productions = await self._filter_csv_duplicates(well_productions)
             if not well_productions:
                 return  # All records were duplicates
-            
             mode = 'a'
-            file_exists = self.csv_path.exists()
         
         with open(self.csv_path, mode, newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
-            if not file_exists:
+            if mode == 'w':  # Only write header when overwriting
                 writer.writeheader()
             
             for well_production in well_productions:
@@ -156,8 +171,7 @@ class CompositeWellProductionRepository(WellProductionRepository):
     
     async def _filter_csv_duplicates(self, well_productions: List[WellProduction]) -> List[WellProduction]:
         """Filter out records that already exist in CSV."""
-        if not self.csv_path.exists():
-            return well_productions
+        await self._ensure_csv_initialized()  # Ensure CSV exists
         
         # Get existing composite keys from CSV
         existing_keys: Set[Tuple[int, int, str]] = set()

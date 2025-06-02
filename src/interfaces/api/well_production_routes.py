@@ -7,6 +7,7 @@ import time
 import uuid
 from typing import Optional
 from datetime import datetime
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import FileResponse
@@ -24,11 +25,15 @@ from ...shared.dependencies import (
 )
 from ...shared.exceptions import ApplicationException, ValidationException
 from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
+from ...shared.job_manager import JobManager, JobStatus
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/wells", tags=["wells"])
+
+# Create a singleton instance
+job_manager = JobManager()
 
 
 async def get_request_id(request: Request) -> str:
@@ -128,89 +133,79 @@ async def import_well_production(
 @router.get("/import/trigger", status_code=status.HTTP_200_OK, response_model=SuccessResponse)
 async def trigger_import_well_production(
     request: Request,
-    service: WellProductionImportService = Depends(provide_well_production_import_service), # Updated
+    service: WellProductionImportService = Depends(provide_well_production_import_service),
     request_id: str = Depends(get_request_id)
 ):
-    """
-    Trigger well production data import with a simple GET request.
-    
-    This endpoint provides a simple way to trigger the import routine without 
-    requiring a POST request or filters. Imports all available data from the 
-    external source using the same optimized batch processing.
-    """
-    start_time = time.time()
-    
+    """Trigger well production data import with a simple GET request."""
     try:
-        logger.info(f"Starting GET import trigger request {request_id}")
-        
-        # Generate batch ID for tracking
-        batch_id = f"import_trigger_{request_id}_{int(time.time())}"
-        
-        # Import data using the service (no filters = import all)
-        result = await service.import_production_data(
-            filters=None,
-            batch_id=batch_id
-        )
-        
-        execution_time_ms = (time.time() - start_time) * 1000
-        
-        # Extract metadata for enhanced messaging
-        metadata = result.metadata or {}
-        new_records = metadata.get('new_records', result.processed_items)
-        duplicate_records = metadata.get('duplicate_records', 0)
-        data_status = metadata.get('data_status', 'unknown')
-        
-        # Create appropriate message based on import results
-        if data_status == 'no_new_data':
-            message = f"Import routine completed - all {result.total_items} records are already up-to-date in the system"
-        elif new_records > 0 and duplicate_records > 0:
-            message = f"Import routine completed: imported {new_records} new records, skipped {duplicate_records} duplicates out of {result.total_items} total records"
-        elif new_records > 0:
-            message = f"Import routine completed: successfully imported {new_records} out of {result.total_items} records"
-        else:
-            message = f"Import routine completed but no new records were added - data is already up-to-date"
+        # Try to create a new job
+        job_id = await job_manager.create_job()
+        if not job_id:
+            return ResponseBuilder.error(
+                message="An import is already in progress. Please wait for it to complete.",
+                error_code="IMPORT_IN_PROGRESS"
+            )
+
+        # Start import in background
+        asyncio.create_task(run_import(job_id, service))
         
         return ResponseBuilder.success(
-            data={
-                "batch_result": result.model_dump(),
-                "import_summary": {
-                    "total_records": result.total_items,
-                    "successful_records": new_records,
-                    "failed_records": result.failed_items,
-                    "duplicate_records": duplicate_records,
-                    "success_rate": result.success_rate,
-                    "batch_id": batch_id,
-                    "data_status": data_status
-                },
-                "performance": {
-                    "execution_time_ms": execution_time_ms,
-                    "memory_usage_mb": result.memory_usage_mb,
-                    "throughput_records_per_second": (
-                        new_records / (execution_time_ms / 1000)
-                        if execution_time_ms > 0 else 0
-                    )
-                }
-            },
-            message=message,
-            request_id=request_id,
-            execution_time_ms=execution_time_ms
+            data={"job_id": job_id},
+            message="Import started successfully"
         )
         
-    except ValidationException as e:
-        logger.warning(f"Validation error in import trigger {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
+    except TypeError as e:
+        logger.error(f"Type error in import trigger {request_id}: {str(e)}")
+        return ResponseBuilder.error(
+            message=f"Error creating import job: {str(e)}",
+            error_code="JOB_CREATION_ERROR"
+        )
+    except Exception as e:
+        logger.error(f"Error in import trigger {request_id}: {str(e)}")
+        return ResponseBuilder.error(
+            message=f"Unexpected error: {str(e)}",
+            error_code="INTERNAL_ERROR"
+        )
+
+async def run_import(job_id: str, service: WellProductionImportService):
+    """Run the import process and update job status"""
+    try:
+        # Update job status to running
+        await job_manager.update_job(job_id, status=JobStatus.RUNNING)
         
-    except ApplicationException as e:
-        logger.error(f"Application error in import trigger {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
+        # Run import
+        result = await service.import_production_data(
+            filters=None,
+            batch_id=job_id
+        )
+        
+        # Update job with results
+        await job_manager.update_job(
+            job_id,
+            status=JobStatus.COMPLETED,
+            total_records=result.total_items,
+            new_records=result.processed_items,
+            duplicate_records=result.metadata.get('duplicate_records', 0)
+        )
         
     except Exception as e:
-        logger.error(f"Unexpected error in import trigger {request_id}: {str(e)}", exc_info=True)
-        error = ApplicationException(
-            message=f"Unexpected error during import: {str(e)}",
-            cause=e
+        # Update job with error
+        await job_manager.update_job(
+            job_id,
+            status=JobStatus.FAILED,
+            error=str(e)
         )
-        return ResponseBuilder.error(error, request_id=request_id)
+
+@router.get("/import/status/{job_id}", status_code=status.HTTP_200_OK)
+async def get_import_status(job_id: str):
+    """Get the status of an import job"""
+    status = job_manager.get_job_status(job_id)
+    if not status:
+        return ResponseBuilder.error(
+            message="Job not found",
+            error_code="JOB_NOT_FOUND"
+        )
+    return ResponseBuilder.success(data=status)
 
 
 @router.get(

@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -61,6 +62,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Mount static files under /static path
+app.mount("/static", StaticFiles(directory="src", html=True), name="static")
 
 # Fetch settings for CORS configuration
 settings = get_settings()

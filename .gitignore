@@ -27,11 +27,18 @@ MANIFEST
 *.swp
 *.swo
 
+# Temporary files
+frontend/frontend_dev_plan.md
+frontend/
+
 # Database
 data/db.duckdb
 external/mocked_response.json
-data/wells_prod.csv
 data/wells_production.duckdb
+
+# Downloads (exclude directory but keep it in git)
+downloads/*
+!downloads/.gitkeep
 
 # Temporary files
 temp/*.csv
@@ -44,6 +51,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+frontend/fenv
 
 # Test environment files
 test_venv/

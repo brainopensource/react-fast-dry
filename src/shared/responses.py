@@ -114,7 +114,7 @@ class ResponseBuilder:
         )
         return JSONResponse(
             status_code=exception.http_status_code,
-            content=error_payload.model_dump()
+            content=error_payload.model_dump(mode='json')
         )
     
     @staticmethod

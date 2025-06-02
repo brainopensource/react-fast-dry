@@ -24,6 +24,7 @@ from ..infrastructure.adapters.external_api_adapter import ExternalApiAdapter
 
 # Shared utilities
 from ..shared.batch_processor import BatchProcessor, BatchConfig
+from ..shared.job_manager import JobManager
 # from .config.settings import get_settings # Example, not used directly yet, config comes from container.configure()
 
 
@@ -109,6 +110,12 @@ class DependencyContainer:
             )
         return self._instances['batch_processor_instance']
 
+    def get_job_manager(self) -> JobManager:
+        """Get the job manager instance"""
+        if 'job_manager' not in self._instances:
+            self._instances['job_manager'] = JobManager()
+        return self._instances['job_manager']
+
     # --- Service Getters ---
     def get_well_production_data_quality_service(self) -> WellProductionService:
         """Get the WellProductionService instance (for data quality)."""
@@ -124,7 +131,7 @@ class DependencyContainer:
             self._instances['well_production_import_service_instance'] = WellProductionImportService(
                 repository=self.get_repository(),
                 external_api=self.get_external_api_adapter(),
-                batch_processor=self.get_batch_processor_instance()
+                job_manager=self.get_job_manager()
             )
         return self._instances['well_production_import_service_instance']
 

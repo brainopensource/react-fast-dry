@@ -11,6 +11,9 @@ from ...shared.exceptions import (
     ApplicationException
 )
 from ...shared.responses import BatchResult
+from ...infrastructure.adapters.external_api_adapter import ExternalApiAdapter
+from ...infrastructure.repositories.composite_well_production_repository import CompositeWellProductionRepository
+from ...shared.job_manager import JobManager
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +25,14 @@ class WellProductionImportService:
 
     def __init__(
         self,
-        repository: WellProductionRepositoryPort,
-        external_api: ExternalApiPort,
-        batch_processor: BatchProcessor # Changed: Optional removed, no default
+        external_api: ExternalApiAdapter,
+        repository: CompositeWellProductionRepository,
+        job_manager: JobManager
     ):
-        self.repository = repository
         self.external_api = external_api
-        self.batch_processor = batch_processor # Changed: Direct assignment
+        self.repository = repository
+        self.job_manager = job_manager
+        self.batch_processor = BatchProcessor()
         # Track import statistics across batches
         self._import_stats = {
             'new_records': 0,
@@ -39,7 +43,7 @@ class WellProductionImportService:
     async def import_production_data(
         self,
         filters: Optional[Dict[str, Any]] = None,
-        batch_id: Optional[str] = None
+        batch_id: str = None
     ) -> BatchResult:
         """
         Import well production data from external source with batch processing.
@@ -67,52 +71,85 @@ class WellProductionImportService:
             }
 
             # Fetch data from external API
-            external_data = await self.external_api.fetch_well_production_data(
-                filters=filters
-            )
-
-            if not external_data:
-                raise ValidationException(
-                    message="No data received from external API",
-                    field="external_data"
+            data = await self.external_api.fetch_well_production_data(filters)
+            
+            if not data:
+                return BatchResult(
+                    batch_id=batch_id,
+                    total_items=0,
+                    processed_items=0,
+                    failed_items=0,
+                    success_rate=100,
+                    errors=[],
+                    execution_time_ms=0,
+                    memory_usage_mb=0
                 )
 
-            # Validate data before processing
-            validated_data = await self._validate_production_data(external_data)
-
             # Process data in batches
-            result = await self.batch_processor.process_async(
-                items=validated_data,
-                processor=self._insert_batch,
-                batch_id=batch_id
-            )
+            total_records = len(data)
+            processed_records = 0
+            new_records = 0
+            duplicate_records = 0
+
+            # Update job with total records
+            if batch_id:
+                await self.job_manager.update_job(
+                    batch_id,
+                    total_records=total_records,
+                    progress=0
+                )
+
+            # Process in batches
+            batch_size = 1000
+            for i in range(0, len(data), batch_size):
+                batch = data[i:i + batch_size]
+                
+                # Save batch to repository
+                result = await self.repository.bulk_insert(batch)
+                new_records += result[1]  # Number of new records
+                duplicate_records += result[2]  # Number of duplicates
+                processed_records += len(batch)
+
+                # Update progress
+                if batch_id:
+                    progress = int((processed_records / total_records) * 100)
+                    await self.job_manager.update_job(
+                        batch_id,
+                        progress=progress,
+                        new_records=new_records,
+                        duplicate_records=duplicate_records
+                    )
 
             # Create enhanced result with duplicate detection info
             enhanced_result = BatchResult(
-                batch_id=result.batch_id,
-                total_items=result.total_items,
-                processed_items=self._import_stats['new_records'],  # Only count new records as "processed"
-                failed_items=result.failed_items,
-                success_rate=(self._import_stats['new_records'] / result.total_items * 100) if result.total_items > 0 else 0,
-                errors=result.errors,
-                execution_time_ms=result.execution_time_ms,
-                memory_usage_mb=result.memory_usage_mb,
-                # Add custom metadata for duplicate tracking
+                batch_id=batch_id,
+                total_items=total_records,
+                processed_items=new_records,
+                failed_items=0,
+                success_rate=100,
+                errors=[],
+                execution_time_ms=0,
+                memory_usage_mb=0,
                 metadata={
-                    'new_records': self._import_stats['new_records'],
-                    'duplicate_records': self._import_stats['duplicate_records'],
-                    'total_from_source': result.total_items,
-                    'data_status': 'new_data_imported' if self._import_stats['new_records'] > 0 else 'no_new_data'
+                    'new_records': new_records,
+                    'duplicate_records': duplicate_records,
+                    'data_status': 'updated' if new_records > 0 else 'no_new_data'
                 }
             )
 
-            logger.info(f"Import completed: {self._import_stats['new_records']} new, {self._import_stats['duplicate_records']} duplicates out of {result.total_items} total records")
+            logger.info(f"Import completed: {new_records} new, {duplicate_records} duplicates out of {total_records} total records")
             return enhanced_result
 
         except ApplicationException:
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during import: {str(e)}")
+            logger.error(f"Error importing data: {str(e)}", exc_info=True)
+            if batch_id:
+                await self.job_manager.update_job(
+                    batch_id,
+                    status='failed',
+                    error=str(e)
+                )
             raise ApplicationException(
                 message=f"Import failed due to unexpected error: {str(e)}",
                 cause=e
