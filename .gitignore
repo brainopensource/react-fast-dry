@@ -35,6 +35,7 @@ frontend/
 data/db.duckdb
 external/mocked_response.json
 data/wells_production.duckdb
+jobs.json
 
 # Downloads (exclude directory but keep it in git)
 downloads/*
