@@ -34,9 +34,13 @@ from ...shared.exceptions import (
 from ...shared.responses import ResponseBuilder, SuccessResponse, ErrorResponse
 from ...shared.job_manager import JobManager, JobStatus
 from ...shared.utils.timing_decorator import async_timed
+from ...shared.config.settings import get_settings
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Get settings instance
+settings = get_settings()
 
 router = APIRouter(prefix="/api/v1/wells", tags=["wells"])
 
@@ -583,7 +587,7 @@ async def run_odata_import_well_production(
                 "import_type": "odata_api",
                 "api_endpoint": "External OData API with pagination",
                 "authentication": "Basic Auth",
-                "max_records_per_request": 998
+                "max_records_per_request": settings.ODATA_MAX_RECORDS_PER_REQUEST
             },
             message="OData import started successfully"
         )

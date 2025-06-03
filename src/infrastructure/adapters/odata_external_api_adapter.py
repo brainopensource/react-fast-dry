@@ -17,9 +17,12 @@ from ...shared.exceptions import (
     ValidationException
 )
 from ...shared.utils.timing_decorator import async_timed
+from ...shared.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Get settings instance
+settings = get_settings()
 
 class ODataExternalApiAdapter(ODataExternalApiPort):
     """
@@ -35,7 +38,7 @@ class ODataExternalApiAdapter(ODataExternalApiPort):
         timeout_seconds: int = 60,
         max_retries: int = 3,
         retry_delay_seconds: float = 2.0,
-        max_records_per_request: int = 998
+        max_records_per_request: int = settings.ODATA_MAX_RECORDS_PER_REQUEST
     ):
         self.base_url = base_url.rstrip('/')
         self.username = username

@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     ODATA_TIMEOUT_SECONDS: int = int(os.getenv("ODATA_TIMEOUT_SECONDS", "60"))
     ODATA_MAX_RETRIES: int = int(os.getenv("ODATA_MAX_RETRIES", "3"))
     ODATA_RETRY_DELAY_SECONDS: float = float(os.getenv("ODATA_RETRY_DELAY_SECONDS", "2.0"))
-    ODATA_MAX_RECORDS_PER_REQUEST: int = int(os.getenv("ODATA_MAX_RECORDS_PER_REQUEST", "998"))
+    ODATA_MAX_RECORDS_PER_REQUEST: int = int(os.getenv("ODATA_MAX_RECORDS_PER_REQUEST", "1001"))
 
     # Configurable data paths
     DATA_ROOT_DIR: Path = APP_DIR / os.getenv("DATA_ROOT_DIR_NAME", "data")
