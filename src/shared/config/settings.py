@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # External API Configuration (non-OData)
     EXTERNAL_API_TIMEOUT_SECONDS: int = 30
     EXTERNAL_API_MAX_RETRIES: int = 3
-    EXTERNAL_API_RETRY_DELAY_SECONDS: float = 4.0
+    EXTERNAL_API_RETRY_DELAY_SECONDS: float = 3.0
     
     # Directory Names (for hardcoded directory creation)
     LOGS_DIR_NAME: str = "logs"
