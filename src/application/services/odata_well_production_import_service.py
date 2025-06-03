@@ -5,6 +5,7 @@ Implements hexagonal architecture and DDD principles with object calisthenics.
 import logging
 from typing import Optional, Dict, Any, Tuple, List
 import polars as pl
+import requests
 
 from ...domain.entities.well_production import WellProduction
 from ...domain.repositories.well_production_repository import WellProductionRepository

@@ -7,6 +7,7 @@ import asyncio
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
 #import httpx
+import requests
 from requests.auth import HTTPBasicAuth
 import polars as pl
 

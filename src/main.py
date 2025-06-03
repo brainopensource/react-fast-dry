@@ -13,7 +13,7 @@ from src.shared.config.settings import get_settings
 from src.shared.dependencies import configure_dependencies
 
 # Import API routes from the interfaces layer
-from .interfaces.api.well_production_routes import router as well_production_router
+from src.interfaces.api.well_production_routes import router as well_production_router
 
 # Ensure logs directory exists
 Path("logs").mkdir(exist_ok=True)
@@ -34,6 +34,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan management."""
     logger.info("Starting Well Production API...")
     settings = get_settings()
+
+    # Ensure data directory exists
+    Path(settings.DATA_ROOT_DIR).mkdir(parents=True, exist_ok=True)
+    Path("downloads").mkdir(parents=True, exist_ok=True)
+    Path("temp").mkdir(parents=True, exist_ok=True)
 
     app_config = {
         "external_api": {
@@ -115,3 +120,7 @@ async def health_check():
 app.mount("/static", StaticFiles(directory="src", html=True), name="static")
 # Mount root directory for favicon and other root-level static files
 app.mount("/", StaticFiles(directory=".", html=True), name="root")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8080)
