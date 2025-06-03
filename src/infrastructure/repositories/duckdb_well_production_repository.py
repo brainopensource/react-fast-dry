@@ -2,7 +2,7 @@ import duckdb
 import csv
 import asyncio
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple, Union
 from datetime import datetime
 import polars as pl
 
@@ -138,65 +138,87 @@ class DuckDBWellProductionRepository(WellProductionRepository):
             return [], 0, 0
 
         with duckdb.connect(str(self.db_path)) as conn:
+            # Register the incoming DataFrame
             conn.register('incoming_productions_df', incoming_df)
 
+            # Get count before insert
             count_before = conn.execute("SELECT COUNT(*) FROM well_production").fetchone()[0]
 
-            insert_query = f"""
+            # Insert with ON CONFLICT DO NOTHING
+            insert_query = """
             INSERT INTO well_production 
             SELECT * FROM incoming_productions_df
             ON CONFLICT (well_code, field_code, production_period) DO NOTHING;
             """
             conn.execute(insert_query)
             
+            # Get count after insert
             count_after = conn.execute("SELECT COUNT(*) FROM well_production").fetchone()[0]
             
+            # Calculate metrics
             new_records_count = count_after - count_before
             total_incoming = incoming_df.height
             duplicate_count = total_incoming - new_records_count
 
+            # Cleanup
             conn.unregister('incoming_productions_df')
 
-        return [], new_records_count, duplicate_count
+            return [], new_records_count, duplicate_count
     
     @async_timed
     async def bulk_insert(self, well_productions: List[WellProduction]) -> Tuple[List[WellProduction], int, int]:
         """Bulk insert well production data with duplicate detection."""
         def _bulk_insert_sync():
             with duckdb.connect(str(self.db_path)) as conn:
-                # Get existing records
-                pk_columns = WellProductionSchema.get_primary_key_columns()
-                pk_values = [(wp.well_code, wp.field_code, wp.production_period) for wp in well_productions]
+                # Get count before insert
+                count_before = conn.execute("SELECT COUNT(*) FROM well_production").fetchone()[0]
                 
-                existing_query = f"""
-                SELECT {', '.join(pk_columns)} 
-                FROM well_production 
-                WHERE ({', '.join(pk_columns)}) IN (VALUES {', '.join(['(?, ?, ?)' for _ in pk_values])})
-                """
-                existing_records = set(conn.execute(existing_query, [v for t in pk_values for v in t]).fetchall())
-                
-                # Filter out duplicates
-                new_records = []
-                duplicate_count = 0
+                # Convert list of WellProduction objects to a DataFrame
+                data = []
                 for wp in well_productions:
-                    if (wp.well_code, wp.field_code, wp.production_period) in existing_records:
-                        duplicate_count += 1
-                    else:
-                        new_records.append(wp)
+                    data.append({
+                        'field_code': wp.field_code,
+                        '_field_name': wp.field_name,  # Use alias for DB column
+                        'well_code': wp.well_code,
+                        '_well_reference': wp.well_reference,  # Use alias for DB column
+                        'well_name': wp.well_name,
+                        'production_period': wp.production_period,
+                        'days_on_production': wp.days_on_production,
+                        'oil_production_kbd': wp.oil_production_kbd,
+                        'gas_production_mmcfd': wp.gas_production_mmcfd,
+                        'liquids_production_kbd': wp.liquids_production_kbd,
+                        'water_production_kbd': wp.water_production_kbd,
+                        'data_source': wp.data_source,
+                        'source_data': wp.source_data,
+                        'partition_0': wp.partition_0,
+                        'created_at': wp.created_at,
+                        'updated_at': wp.updated_at
+                    })
                 
-                # Insert new records
-                if new_records:
-                    columns = WellProductionSchema.get_column_names()
-                    placeholders = ", ".join(["?" for _ in columns])
-                    insert_query = f"""
-                    INSERT INTO well_production 
-                    ({', '.join(columns)}) 
-                    VALUES ({placeholders})
-                    """
-                    for wp in new_records:
-                        conn.execute(insert_query, self._entity_to_params(wp))
+                # Create DataFrame and register it with DuckDB
+                df = pl.DataFrame(data)
+                conn.register('incoming_productions_df', df)
                 
-                return new_records, len(new_records), duplicate_count
+                # Bulk insert with ON CONFLICT DO NOTHING
+                insert_query = """
+                INSERT INTO well_production 
+                SELECT * FROM incoming_productions_df
+                ON CONFLICT (well_code, field_code, production_period) DO NOTHING;
+                """
+                conn.execute(insert_query)
+                
+                # Get count after insert
+                count_after = conn.execute("SELECT COUNT(*) FROM well_production").fetchone()[0]
+                
+                # Calculate metrics
+                new_records_count = count_after - count_before
+                total_incoming = len(well_productions)
+                duplicate_count = total_incoming - new_records_count
+                
+                # Cleanup
+                conn.unregister('incoming_productions_df')
+                
+                return [], new_records_count, duplicate_count
         
         return await asyncio.to_thread(_bulk_insert_sync)
     
@@ -236,7 +258,7 @@ class DuckDBWellProductionRepository(WellProductionRepository):
             conn = duckdb.connect(str(self.db_path))
             
             # Configure DuckDB for optimal performance
-            conn.execute(f"PRAGMA memory_limit='{self.MEMORY_LIMIT}'")
+            conn.execute(f"PRAGMA memory_limit='{self.MEMORY_LIMIT}GB'")
             conn.execute(f"PRAGMA threads={self.THREADS}")
             
             # Get total count for progress tracking

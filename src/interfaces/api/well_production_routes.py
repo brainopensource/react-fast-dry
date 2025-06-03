@@ -204,9 +204,8 @@ async def download_well_production(
     try:
         logger.info(f"Starting download request {request_id}")
         
-        # Get repository and export to CSV
-        repository = service.repository
-        csv_path = await repository.export_to_csv()
+        # Export to CSV using the service
+        csv_path = await service.export_to_csv()
         
         if not csv_path.exists():
             raise ValidationException(

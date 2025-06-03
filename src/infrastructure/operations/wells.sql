@@ -1,9 +1,9 @@
 -- name: create_table
 CREATE TABLE IF NOT EXISTS well_production (
     field_code INTEGER NOT NULL,
-    field_name VARCHAR NOT NULL,
+    _field_name VARCHAR NOT NULL,
     well_code INTEGER NOT NULL,
-    well_reference VARCHAR NOT NULL,
+    _well_reference VARCHAR NOT NULL,
     well_name VARCHAR NOT NULL,
     production_period VARCHAR NOT NULL,
     days_on_production INTEGER NOT NULL,
@@ -39,7 +39,7 @@ SELECT COUNT(*) FROM well_production;
 
 -- name: insert_single
 INSERT OR REPLACE INTO well_production (
-    field_code, field_name, well_code, well_reference, well_name,
+    field_code, _field_name, well_code, _well_reference, well_name,
     production_period, days_on_production, oil_production_kbd,
     gas_production_mmcfd, liquids_production_kbd, water_production_kbd,
     data_source, source_data, partition_0, created_at, updated_at
@@ -47,7 +47,7 @@ INSERT OR REPLACE INTO well_production (
 
 -- name: insert_bulk
 INSERT OR REPLACE INTO well_production (
-    field_code, field_name, well_code, well_reference, well_name,
+    field_code, _field_name, well_code, _well_reference, well_name,
     production_period, days_on_production, oil_production_kbd,
     gas_production_mmcfd, liquids_production_kbd, water_production_kbd,
     data_source, source_data, partition_0, created_at, updated_at

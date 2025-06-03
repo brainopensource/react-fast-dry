@@ -40,128 +40,111 @@ class WellProductionImportService:
         # These stats are reset per call to import_production_data, which is correct.
         # self._import_stats can be removed if stats are handled locally within import_production_data
 
-    @async_timed # Added decorator
+    @async_timed
     async def import_production_data(
         self,
         filters: Optional[Dict[str, Any]] = None,
         batch_id: str = None
     ) -> BatchResult:
         """
-        Import well production data from external source with batch processing.
-        Assumes external_api.fetch_well_production_data now returns a Polars DataFrame.
-        Handles validation and batch insertion of data using Polars DataFrames.
+        Import well production data from external source.
+        
+        Args:
+            filters: Optional filters to apply
+            batch_id: Optional batch ID for tracking
+            
+        Returns:
+            BatchResult with import statistics
         """
         try:
             logger.info(f"Starting well production data import (batch ID: {batch_id})")
-
+            
+            # Initialize counters
+            total_records_from_source = 0
             total_new_records_inserted = 0
             total_duplicate_records_skipped = 0
             total_failed_validation_records = 0
-            all_validation_errors = [] 
-
-            # fetch_well_production_data now returns a Polars DataFrame from ExternalApiAdapter
-            incoming_df = await self.external_api.fetch_well_production_data(filters)
-
-            if incoming_df is None or incoming_df.is_empty():
-                logger.info(f"No data returned from external API for batch ID: {batch_id}")
-                return BatchResult(
-                    batch_id=batch_id, total_items=0, processed_items=0, failed_items=0,
-                    success_rate=100, errors=[], execution_time_ms=0, memory_usage_mb=0,
-                    metadata={'data_status': 'no_data_from_source'}
-                )
-
-            total_records_from_source = incoming_df.height
-            logger.info(f"Received {total_records_from_source} records from external API (batch ID: {batch_id}) as Polars DataFrame.")
-
+            all_validation_errors = []
+            
+            # Fetch data from external API
+            well_productions = await self.external_api.fetch_well_production_data(
+                endpoint=None,
+                filters=filters
+            )
+            
+            total_records_from_source = len(well_productions)
+            logger.info(f"Received {total_records_from_source} records from external API (batch ID: {batch_id})")
+            
             if batch_id:
                 await self.job_manager.update_job(
                     batch_id,
                     total_records=total_records_from_source,
-                    progress=0 # Initial progress
+                    progress=0
                 )
             
-            # Validate the entire DataFrame. 
-            # _validate_production_data_df will be refactored to accept Polars DF 
-            # and return a tuple: (validated_polars_df, list_of_error_dicts)
-            valid_df, validation_errors_for_df = self._validate_production_data_df(incoming_df)
-            
-            if validation_errors_for_df:
-                all_validation_errors.extend(validation_errors_for_df)
-            
-            total_failed_validation_records = total_records_from_source - valid_df.height
-            if total_failed_validation_records > 0:
-                 logger.warning(f"{total_failed_validation_records} records failed validation for batch ID {batch_id}.")
-
-            if valid_df.is_empty():
-                logger.info(f"No valid records after validation for batch ID: {batch_id}. Total from source: {total_records_from_source}")
+            if not well_productions:
+                logger.info(f"No records returned from external API for batch ID: {batch_id}")
                 if batch_id:
                     await self.job_manager.update_job(
                         batch_id, progress=100, 
-                        new_records=0, duplicate_records=0,
-                        # We can add 'failed_validation_records': total_failed_validation_records to job metadata here
+                        new_records=0, duplicate_records=0
                     )
                 return BatchResult(
-                    batch_id=batch_id, total_items=total_records_from_source, 
-                    processed_items=0, failed_items=total_failed_validation_records,
-                    success_rate=0, errors=[str(e) for e in all_validation_errors], 
-                    execution_time_ms=0, memory_usage_mb=0,
+                    batch_id=batch_id,
+                    total_items=0,
+                    processed_items=0,
+                    failed_items=0,
+                    success_rate=100,
+                    errors=[],
+                    execution_time_ms=0,
+                    memory_usage_mb=0,
                     metadata={
-                        'new_records': 0, 'duplicate_records': 0,
-                        'failed_validation_records': total_failed_validation_records,
-                        'data_status': 'all_failed_validation' if total_records_from_source > 0 else 'no_data_from_source'
+                        'new_records': 0,
+                        'duplicate_records': 0,
+                        'failed_validation_records': 0,
+                        'data_status': 'no_data_from_source'
                     }
                 )
-
-            # At this point, valid_df contains only rows that passed schema and rule validation.
-            # Now, pass this Polars DataFrame to the repository's bulk_insert method.
-            # The repository's bulk_insert is already refactored to accept a Polars DataFrame.
             
-            # The first element of the tuple (list of WellProduction entities) is [] due to performance reasons.
-            _, inserted_count, duplicate_count = await self.repository.bulk_insert(valid_df)
+            # Insert data into repository
+            _, inserted_count, duplicate_count = await self.repository.bulk_insert(well_productions)
             
             total_new_records_inserted = inserted_count
             total_duplicate_records_skipped = duplicate_count
-
+            
             if batch_id:
                 await self.job_manager.update_job(
-                    batch_id, progress=100, # Mark as 100% processed
+                    batch_id, progress=100,
                     new_records=total_new_records_inserted,
                     duplicate_records=total_duplicate_records_skipped
                 )
-
+            
             # Determine overall data status
             data_status = 'no_new_data'
             if total_new_records_inserted > 0:
                 data_status = 'updated'
-            # If all valid records were duplicates
-            elif valid_df.height > 0 and total_duplicate_records_skipped == valid_df.height:
-                 data_status = 'no_new_data_all_duplicates'
-            elif total_records_from_source > 0 and total_failed_validation_records == total_records_from_source:
-                data_status = 'all_failed_validation'
+            elif total_records_from_source > 0 and total_duplicate_records_skipped == total_records_from_source:
+                data_status = 'no_new_data_all_duplicates'
             elif total_records_from_source == 0:
                 data_status = 'no_data_from_source'
-                
-            # Calculate success rate based on valid items that were intended for insertion
-            potential_inserts = valid_df.height
-            success_rate = ((total_new_records_inserted / potential_inserts) * 100) if potential_inserts > 0 else 100
-            if total_records_from_source == 0: success_rate = 100 
-            if potential_inserts == 0 and total_records_from_source > 0 : success_rate = 0
-
+            
+            # Calculate success rate
+            success_rate = ((total_new_records_inserted / total_records_from_source) * 100) if total_records_from_source > 0 else 100
+            
             logger.info(f"Import completed for batch ID {batch_id}: "
-                        f"{total_new_records_inserted} new, "
-                        f"{total_duplicate_records_skipped} duplicates (from {potential_inserts} valid records), "
-                        f"{total_failed_validation_records} failed validation "
-                        f"out of {total_records_from_source} total records from source.")
-
+                       f"{total_new_records_inserted} new, "
+                       f"{total_duplicate_records_skipped} duplicates "
+                       f"out of {total_records_from_source} total records from source.")
+            
             return BatchResult(
                 batch_id=batch_id,
                 total_items=total_records_from_source,
                 processed_items=total_new_records_inserted,
-                failed_items=total_failed_validation_records + total_duplicate_records_skipped, 
+                failed_items=total_duplicate_records_skipped,
                 success_rate=success_rate,
                 errors=[str(e) for e in all_validation_errors],
-                execution_time_ms=0, # To be filled by caller or job manager
-                memory_usage_mb=0,   # To be filled by caller or job manager
+                execution_time_ms=0,
+                memory_usage_mb=0,
                 metadata={
                     'new_records': total_new_records_inserted,
                     'duplicate_records': total_duplicate_records_skipped,
@@ -169,8 +152,8 @@ class WellProductionImportService:
                     'data_status': data_status
                 }
             )
-
-        except ApplicationException as e: 
+            
+        except ApplicationException as e:
             logger.error(f"Application error during import (batch ID: {batch_id}): {str(e)}", exc_info=True)
             if batch_id:
                 await self.job_manager.update_job(batch_id, status='failed', error=str(e))
@@ -198,36 +181,11 @@ class WellProductionImportService:
         errors: List[Dict[str, Any]] = []
         df_to_validate = production_df.clone() # Work on a clone to avoid modifying the original
 
-        # --- Field Name Mapping (Align with WellProduction entity and DB schema) ---
-        # Source JSON field names (keys) to target DataFrame/DB column names (values)
-        rename_map = {
-            # Direct mappings for fields that already match
-            "field_code": "field_code",
-            "field_name": "field_name",
-            "well_code": "well_code", 
-            "well_reference": "well_reference",
-            "well_name": "well_name",
-            "production_period": "production_period",
-            "days_on_production": "days_on_production",
-            "oil_production_kbd": "oil_production_kbd",
-            "gas_production_mmcfd": "gas_production_mmcfd",
-            "liquids_production_kbd": "liquids_production_kbd",
-            "water_production_kbd": "water_production_kbd",
-            "data_source": "data_source",
-            "source_data": "source_data", 
-            "partition_0": "partition_0",
-            "created_at": "created_at",
-            "updated_at": "updated_at"
-        }
-        actual_rename_map = {k: v for k, v in rename_map.items() if k in df_to_validate.columns}
-        if actual_rename_map:
-            df_to_validate = df_to_validate.rename(actual_rename_map)
-
         # --- Define Target Schema (Matches DuckDB well_production table) ---
         # This ensures correct types and column order for DB insertion.
         target_schema_with_types = {
-            "field_code": pl.Int64, "field_name": pl.Utf8, "well_code": pl.Int64,
-            "well_reference": pl.Utf8, "well_name": pl.Utf8, "production_period": pl.Utf8,
+            "field_code": pl.Int64, "_field_name": pl.Utf8, "well_code": pl.Int64,
+            "_well_reference": pl.Utf8, "well_name": pl.Utf8, "production_period": pl.Utf8,
             "days_on_production": pl.Int64, "oil_production_kbd": pl.Float64,
             "gas_production_mmcfd": pl.Float64, "liquids_production_kbd": pl.Float64,
             "water_production_kbd": pl.Float64, "data_source": pl.Utf8,
@@ -238,26 +196,12 @@ class WellProductionImportService:
 
         # --- Type Casting and Column Preparation ---
         expressions_for_casting = []
-        for col_name, target_type in target_schema_with_types.items():
-            if col_name in df_to_validate.columns:
-                current_type = df_to_validate[col_name].dtype
-                if target_type == pl.Datetime and current_type == pl.Utf8:
-                    # Attempt to parse ISO 8601 format, Coalesce errors to null
-                    # Example: "2023-01-15T10:00:00Z" or "2023-01-15T10:00:00.123456Z"
-                    # Polars' strptime is quite flexible. Adjust format string if needed.
-                    expressions_for_casting.append(
-                        pl.col(col_name).str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%S%.f%Z", strict=False, exact=False).alias(col_name)
-                    )
-                elif target_type == pl.Int64 and current_type == pl.Utf8:
-                    expressions_for_casting.append(pl.col(col_name).cast(pl.Int64, strict=False).alias(col_name))
-                elif target_type == pl.Float64 and current_type == pl.Utf8:
-                     expressions_for_casting.append(pl.col(col_name).cast(pl.Float64, strict=False).alias(col_name))
-                elif current_type != target_type:
-                    expressions_for_casting.append(pl.col(col_name).cast(target_type, strict=False).alias(col_name))
-            else:
-                # Add missing columns as null literals of the target type
-                expressions_for_casting.append(pl.lit(None, dtype=target_type).alias(col_name))
         
+        # Handle type casting
+        for col, target_type in target_schema_with_types.items():
+            if col in production_df.columns:
+                expressions_for_casting.append(pl.col(col).cast(target_type))
+
         if expressions_for_casting:
             df_to_validate = df_to_validate.with_columns(expressions_for_casting)
         

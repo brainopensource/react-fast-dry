@@ -44,7 +44,7 @@ class ExternalApiAdapter(ExternalApiPort):
         self.base_url = base_url
         self.api_key = api_key
         self.mock_mode = mock_mode
-        self.mock_file_path = mock_file_path
+        self.mock_file_path = Path(mock_file_path) if mock_file_path else None
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
@@ -131,17 +131,17 @@ class ExternalApiAdapter(ExternalApiPort):
                 "last_check": datetime.utcnow().isoformat()
             }
     
-    @async_timed # Added decorator
-    async def _fetch_mock_data(self) -> pl.DataFrame:
+    @async_timed
+    async def _fetch_mock_data(self) -> List[WellProduction]:
         """
-        Fetch data from mock file with error handling, returning a Polars DataFrame.
+        Fetch data from mock file with error handling, returning a list of WellProduction entities.
         
         Returns:
-            polars.DataFrame: The data loaded from the mock file.
+            List[WellProduction]: The data loaded from the mock file.
             
         Raises:
             FileSystemException: When file operations fail
-            ValidationException: When data format is invalid or DataFrame creation fails
+            ValidationException: When data format is invalid
         """
         try:
             if not self.mock_file_path.exists():
@@ -150,13 +150,13 @@ class ExternalApiAdapter(ExternalApiPort):
                     file_path=str(self.mock_file_path)
                 )
             
-            logger.info(f"Loading mock data from {self.mock_file_path} using Polars")
+            logger.info(f"Loading mock data from {self.mock_file_path}")
             
             # Read the entire JSON structure first
             with open(self.mock_file_path, 'r', encoding='utf-8') as f:
                 raw_data = json.load(f)
             
-            # Extract the relevant part of the data for Polars
+            # Extract the relevant part of the data
             if 'value' in raw_data:
                 wells_data_list = raw_data['value']
             else:
@@ -164,39 +164,27 @@ class ExternalApiAdapter(ExternalApiPort):
             
             if not isinstance(wells_data_list, list):
                 raise ValidationException(
-                    message="Mock data must be a list or contain a 'value' field with a list of records for Polars.",
+                    message="Mock data must be a list or contain a 'value' field with a list of records.",
                     field="wells_data"
                 )
 
-            if not wells_data_list: # Handle empty list case
+            if not wells_data_list:
                 logger.info("Mock data list is empty. No records to process.")
-                return pl.DataFrame() # Return an empty DataFrame
+                return []
 
-            # Convert the list of dicts to a Polars DataFrame
-            try:
-                # Polars can infer schema. If specific dtypes or name mapping is needed,
-                # it can be specified here. For now, assume direct conversion is okay.
-                # The _map_well_data_fields logic would need to be translated to Polars operations
-                # if JSON field names differ significantly from desired DataFrame column names
-                # or if complex transformations are needed before creating WellProduction entities later.
-                df = pl.DataFrame(wells_data_list)
-                
-                # Optional: Add explicit field mapping or type casting here using Polars if needed
-                # e.g., df = df.rename({"json_field_name": "entity_field_name"})
-                # e.g., df = df.with_columns([
-                # pl.col("date_str_column").str.strptime(pl.Datetime, "%Y-%m-%dT%H:%M:%S%.f").alias("created_at"),
-                # ])
-                # This would replace the _map_well_data_fields and parts of WellProduction instantiation logic later on.
-
-            except Exception as e: # Catch Polars-specific errors if any during DataFrame creation
-                logger.error(f"Error creating Polars DataFrame from mock data: {e}", exc_info=True)
-                raise ValidationException(
-                    message=f"Could not convert mock data to Polars DataFrame: {str(e)}",
-                    field="wells_data_conversion"
-                )
+            # Convert to WellProduction entities
+            well_productions = []
+            for well_data in wells_data_list:
+                try:
+                    # Map field names from JSON format to entity format
+                    mapped_data = self._map_well_data_fields(well_data)
+                    well_production = WellProduction(**mapped_data)
+                    well_productions.append(well_production)
+                except Exception as e:
+                    logger.warning(f"Skipping invalid well data: {str(e)}")
             
-            logger.info(f"Successfully loaded {df.height} well production records into Polars DataFrame")
-            return df # Return the DataFrame directly
+            logger.info(f"Successfully loaded {len(well_productions)} well production records")
+            return well_productions
             
         except (FileSystemException, ValidationException):
             raise
@@ -326,25 +314,20 @@ class ExternalApiAdapter(ExternalApiPort):
         )
     
     def _map_well_data_fields(self, well_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Map field names from external API format to WellProduction entity format.
-        
-        Args:
-            well_data: Raw well data from external API
-            
-        Returns:
-            Mapped data with correct field names for WellProduction entity
-        """
-        mapped_data = well_data.copy()
-        
-        # Map underscore-prefixed fields to entity field names
-        field_mappings = {
-            '_field_name': 'field_name',
-            '_well_reference': 'well_reference'
+        """Map field names from API format to entity format."""
+        field_mapping = {
+            "_field_name": "field_name",
+            "_well_reference": "well_reference"
         }
         
-        for old_key, new_key in field_mappings.items():
-            if old_key in mapped_data:
-                mapped_data[new_key] = mapped_data.pop(old_key)
+        # Create a new dict with mapped fields
+        mapped_data = {}
+        for key, value in well_data.items():
+            # Remove underscore prefix if it exists
+            mapped_key = field_mapping.get(key, key)
+            if mapped_key != key:
+                mapped_data[mapped_key] = value
+            else:
+                mapped_data[key] = value
         
         return mapped_data 

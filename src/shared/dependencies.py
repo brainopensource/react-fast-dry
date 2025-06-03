@@ -135,6 +135,7 @@ class DependencyContainer:
             self._instances['well_production_import_service_instance'] = WellProductionImportService(
                 repository=self.get_repository(),
                 external_api=self.get_external_api_adapter(),
+                batch_processor=self.get_batch_processor_instance(),
                 job_manager=self.get_job_manager()
             )
         return self._instances['well_production_import_service_instance']

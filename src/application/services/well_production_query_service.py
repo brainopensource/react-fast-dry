@@ -1,6 +1,7 @@
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from pathlib import Path
 
 from ...domain.entities.well_production import WellProduction
 from ...domain.repositories.well_production_repository import WellProductionRepository as WellProductionRepositoryPort
@@ -158,5 +159,24 @@ class WellProductionQueryService:
             logger.error(f"Error getting production statistics: {str(e)}")
             raise ApplicationException(
                 message=f"Failed to get statistics: {str(e)}",
+                cause=e
+            )
+
+    async def export_to_csv(self) -> Path:
+        """
+        Export all well production data to a CSV file.
+        
+        Returns:
+            Path to the exported CSV file
+            
+        Raises:
+            ApplicationException: If export fails
+        """
+        try:
+            return await self.repository.export_to_csv()
+        except Exception as e:
+            logger.error(f"Error exporting well production data: {str(e)}")
+            raise ApplicationException(
+                message=f"Failed to export well production data: {str(e)}",
                 cause=e
             )

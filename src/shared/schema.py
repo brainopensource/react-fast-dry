@@ -4,12 +4,12 @@ import polars as pl
 from pydantic import BaseModel, Field, ConfigDict
 from .config.settings import get_settings
 
-class WellProductionBase(BaseModel):
-    """Base model for well production data with validation"""
+class WellProduction(BaseModel):
+    """Base model for well production data with validation - Single source of truth"""
     field_code: int = Field(description="Unique identifier for the field")
-    field_name: str = Field(description="Name of the field")
+    field_name: str = Field(description="Name of the field", alias="_field_name")
     well_code: int = Field(description="Unique identifier for the well")
-    well_reference: str = Field(description="Reference code for the well")
+    well_reference: str = Field(description="Reference code for the well", alias="_well_reference")
     well_name: str = Field(description="Name of the well")
     production_period: str = Field(description="Production period identifier")
     days_on_production: int = Field(description="Number of days the well was on production")
@@ -24,6 +24,8 @@ class WellProductionBase(BaseModel):
     updated_at: Optional[datetime] = Field(None, description="Timestamp of last record update")
 
     model_config = ConfigDict(
+        populate_by_name=True,
+        validate_by_name=True,
         json_schema_extra={
             "example": {
                 "field_code": 12345,
@@ -46,13 +48,26 @@ class WellProductionBase(BaseModel):
         }
     )
 
+    def get_primary_key(self) -> tuple:
+        """Get the primary key components"""
+        return (self.well_code, self.field_code, self.production_period)
+
+    def to_dict(self) -> dict:
+        """Convert entity to dictionary"""
+        return self.model_dump(by_alias=True)  # Use aliases for database fields
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'WellProduction':
+        """Create entity from dictionary"""
+        return cls.model_validate(data)
+
 # API DTOs
-class WellProductionResponse(WellProductionBase):
+class WellProductionResponse(WellProduction):
     """API response schema for well production data."""
     class Config:
         from_attributes = True  # Allows creation from domain entities
 
-class WellProductionCreate(WellProductionBase):
+class WellProductionCreate(WellProduction):
     """Schema for creating new well production records."""
     pass
 
@@ -93,9 +108,9 @@ class WellProductionSchema:
         """Get Polars schema dictionary for data processing"""
         return {
             "field_code": pl.Int64,
-            "field_name": pl.Utf8,
+            "_field_name": pl.Utf8,
             "well_code": pl.Int64,
-            "well_reference": pl.Utf8,
+            "_well_reference": pl.Utf8,
             "well_name": pl.Utf8,
             "production_period": pl.Utf8,
             "days_on_production": pl.Int64,
@@ -118,7 +133,24 @@ class WellProductionSchema:
     @staticmethod
     def get_field_mapping() -> Dict[str, str]:
         """Get field mapping for external API responses"""
-        return {name: name for name in WellProductionSchema.get_column_names()}
+        return {
+            "field_code": "field_code",
+            "_field_name": "field_name",
+            "well_code": "well_code",
+            "_well_reference": "well_reference",
+            "well_name": "well_name",
+            "production_period": "production_period",
+            "days_on_production": "days_on_production",
+            "oil_production_kbd": "oil_production_kbd",
+            "gas_production_mmcfd": "gas_production_mmcfd",
+            "liquids_production_kbd": "liquids_production_kbd",
+            "water_production_kbd": "water_production_kbd",
+            "data_source": "data_source",
+            "source_data": "source_data",
+            "partition_0": "partition_0",
+            "created_at": "created_at",
+            "updated_at": "updated_at"
+        }
 
     @staticmethod
     def get_primary_key_columns() -> List[str]:
@@ -129,7 +161,7 @@ class WellProductionSchema:
     def get_required_columns() -> List[str]:
         """Get list of non-nullable column names"""
         return [
-            "field_code", "field_name", "well_code", "well_reference",
+            "field_code", "_field_name", "well_code", "_well_reference",
             "well_name", "production_period", "days_on_production"
         ]
 
@@ -194,14 +226,14 @@ class WellProductionSchema:
         }
 
     @staticmethod
-    def validate_data(data: Dict[str, Any]) -> WellProductionBase:
+    def validate_data(data: Dict[str, Any]) -> WellProduction:
         """Validate data against the schema"""
-        return WellProductionBase.model_validate(data)
+        return WellProduction.model_validate(data)
 
     @staticmethod
-    def to_dict(model: WellProductionBase) -> Dict[str, Any]:
+    def to_dict(model: WellProduction) -> Dict[str, Any]:
         """Convert model to dictionary"""
-        return model.model_dump()
+        return model.model_dump(by_alias=True)  # Use aliases for database fields
 
     @staticmethod
     def get_csv_fieldnames() -> List[str]:

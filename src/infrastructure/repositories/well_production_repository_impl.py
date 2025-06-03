@@ -16,17 +16,18 @@ class WellProductionRepositoryImpl(WellProductionRepository):
         self.data_dir.mkdir(exist_ok=True)
         self.csv_path = self.data_dir / "wells_prod.csv"
     
-    async def get_by_well_code(self, well_code: int) -> Optional[WellProduction]:
+    async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code."""
         if not self.csv_path.exists():
-            return None
+            return []
             
-        with open(self.csv_path, 'r') as f:
+        results = []
+        with open(self.csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 if int(row['well_code']) == well_code:
-                    return self._row_to_entity(row)
-        return None
+                    results.append(self._row_to_entity(row))
+        return results
     
     async def get_by_field_code(self, field_code: int) -> List[WellProduction]:
         """Get all well production data for a field."""
@@ -202,4 +203,16 @@ class WellProductionRepositoryImpl(WellProductionRepository):
             'partition_0': entity.partition_0,
             'created_at': entity.created_at.isoformat() if entity.created_at else '',
             'updated_at': entity.updated_at.isoformat() if entity.updated_at else ''
-        } 
+        }
+
+    async def export_to_csv(self) -> Path:
+        """Export all well production data to a CSV file."""
+        if not self.csv_path.exists():
+            # Create an empty file with headers
+            with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
+                writer.writeheader()
+            return self.csv_path
+            
+        # If file exists, just return its path
+        return self.csv_path 
