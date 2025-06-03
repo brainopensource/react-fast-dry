@@ -12,11 +12,14 @@ load_dotenv()
 class Settings(BaseSettings):
     """Application settings.
     
-    Uses pydantic BaseSettings to load configuration from environment variables.
-    """
-    # Environment
-    ENV: str = os.getenv("APP_ENV", "development")
-    DEBUG: bool = os.getenv("APP_DEBUG", "True").lower() == "true"
+    Only sensitive OData credentials use environment variables.
+    Everything else is hardcoded in settings.
+    """    # Environment
+    ENV: str = "development"  # Options: "development", "testing", "production"
+    DEBUG: bool = True
+    
+    # Mock Mode Configuration (independent of ENV for testing flexibility)
+    USE_MOCK_DATA: bool = True  # Set to False to test real API calls
     
     # Application paths
     APP_DIR: Path = Path(__file__).parent.parent.parent.parent
@@ -25,11 +28,11 @@ class Settings(BaseSettings):
     SQL_DIR: Path = APP_DIR / "src" / "sql"
 
     # External API configuration
-    API_BASE_URL: Optional[str] = os.getenv("API_BASE_URL")
-    API_KEY: Optional[str] = os.getenv("API_KEY")    # OData External API configuration
     ODATA_BASE_URL: Optional[str] = os.getenv("ODATA_BASE_URL", "https://example.com/odata")
     ODATA_USERNAME: Optional[str] = os.getenv("ODATA_USERNAME", "dev_user")
     ODATA_PASSWORD: Optional[str] = os.getenv("ODATA_PASSWORD", "dev_password")
+
+
     ODATA_TIMEOUT_SECONDS: int = 60
     ODATA_MAX_RETRIES: int = 3
     ODATA_RETRY_DELAY_SECONDS: float = 2.0
@@ -49,9 +52,9 @@ class Settings(BaseSettings):
     VALIDATION_MAX_PRODUCTION_VALUE: float = 999999.0
 
     # Configurable data paths
-    DATA_ROOT_DIR: Path = APP_DIR / os.getenv("DATA_ROOT_DIR_NAME", "data")
-    DUCKDB_FILENAME: str = os.getenv("DUCKDB_FILENAME", "wells_production.duckdb")
-    CSV_EXPORT_FILENAME: str = os.getenv("CSV_EXPORT_FILENAME", "wells_production.csv")
+    DATA_ROOT_DIR: Path = APP_DIR / "data"
+    DUCKDB_FILENAME: str = "wells_production.duckdb"
+    CSV_EXPORT_FILENAME: str = "wells_production.csv"
     
     # Database
     DB_PATH: Path = DATA_ROOT_DIR / DUCKDB_FILENAME
@@ -60,13 +63,42 @@ class Settings(BaseSettings):
     # Export paths
     WELLS_EXPORT_PATH: Path = DATA_ROOT_DIR / CSV_EXPORT_FILENAME
     # Mocked response path
-    MOCKED_RESPONSE_PATH: Path = APP_DIR / "external" / "mocked_response.json"
-
-    # CORS settings
-    CORS_ALLOWED_ORIGINS: list[str] = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "*").split(',')]
+    MOCKED_RESPONSE_PATH: Path = APP_DIR / "external" / "mocked_response.json"    # CORS settings
+    CORS_ALLOWED_ORIGINS: list[str] = ["*"]  # Allow all origins for development, configure for production
+    
+    # Server Configuration
+    SERVER_HOST: str = "0.0.0.0"
+    SERVER_PORT: int = 8080
+    
+    # External API Configuration (non-OData)
+    EXTERNAL_API_TIMEOUT_SECONDS: int = 30
+    EXTERNAL_API_MAX_RETRIES: int = 3
+    EXTERNAL_API_RETRY_DELAY_SECONDS: float = 4.0
+    
+    # Directory Names (for hardcoded directory creation)
+    LOGS_DIR_NAME: str = "logs"
+    DOWNLOADS_DIR_NAME: str = "downloads"
+    TEMP_DIR_NAME: str = "temp"
+    
+    # Log File Configuration
+    LOG_FILENAME: str = "wells_api.log"
+    LOG_LEVEL: str = "INFO"
+    
+    # DuckDB Export Configuration
+    DUCKDB_EXPORT_BATCH_SIZE: int = 100_000
+    DUCKDB_EXPORT_MEMORY_LIMIT: str = "6GB"
+    DUCKDB_EXPORT_THREADS: int = 4
+    
+    # Default Filenames
+    DEFAULT_CSV_FILENAME: str = "wells_prod.csv"
+    
+    # Application Information
+    API_TITLE: str = "Well Production API"
+    API_DESCRIPTION: str = "High-performance API for managing millions of well production records using DuckDB with on-demand CSV export"
+    API_VERSION: str = "1.0.0"
     
     class Config:
-        env_prefix = "APP_" # Note: env_prefix might not be needed if using os.getenv explicitly for all
+        env_prefix = "APP_"
         use_enum_values = True
 
     def setup_directories(self):

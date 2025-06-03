@@ -29,7 +29,7 @@ class ODataExternalApiAdapter(ODataExternalApiPort):
     Adapter for OData external API services with pagination support.
     Handles Basic Authentication and follows OData pagination patterns.
     """
-      def __init__(
+    def __init__(
         self,
         base_url: str,
         username: str,
@@ -276,7 +276,7 @@ class ODataExternalApiAdapter(ODataExternalApiPort):
                 '$top': 1,
                 '$format': 'json'
             }
-              response = await asyncio.get_event_loop().run_in_executor(
+            response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: requests.get(
                     self.base_url,
@@ -319,4 +319,4 @@ class ODataExternalApiAdapter(ODataExternalApiPort):
                 "api_type": "odata",
                 "error_message": str(e),
                 "last_check": datetime.utcnow().isoformat()
-            } 
+            }

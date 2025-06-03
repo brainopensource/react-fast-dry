@@ -25,28 +25,31 @@ logger = logging.getLogger(__name__)
 
 
 class ExternalApiAdapter(ExternalApiPort):
+
     """
     Adapter for external API services with comprehensive error handling.
     Supports both real API calls and mock mode for development/testing.
     """
-    
     def __init__(
         self,
         base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         mock_mode: bool = True,
         mock_file_path: Optional[str] = None,
-        timeout_seconds: int = 30,
-        max_retries: int = 3,
-        retry_delay_seconds: float = 1.0
-    ):
+        timeout_seconds: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        retry_delay_seconds: Optional[float] = None
+        ):
+        # Get settings for default values
+        settings = get_settings()
+        
         self.base_url = base_url
         self.api_key = api_key
         self.mock_mode = mock_mode
-        self.mock_file_path = Path(mock_file_path) if mock_file_path else get_settings().MOCKED_RESPONSE_PATH
-        self.timeout_seconds = timeout_seconds
-        self.max_retries = max_retries
-        self.retry_delay_seconds = retry_delay_seconds
+        self.mock_file_path = Path(mock_file_path) if mock_file_path else settings.MOCKED_RESPONSE_PATH
+        self.timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.EXTERNAL_API_TIMEOUT_SECONDS
+        self.max_retries = max_retries if max_retries is not None else settings.EXTERNAL_API_MAX_RETRIES
+        self.retry_delay_seconds = retry_delay_seconds if retry_delay_seconds is not None else settings.EXTERNAL_API_RETRY_DELAY_SECONDS
         
         # Validate configuration
         if not mock_mode and not base_url:
