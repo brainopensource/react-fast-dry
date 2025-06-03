@@ -1,8 +1,6 @@
 import logging
 # asyncio and concurrent.futures removed
 from typing import List, Optional, Dict, Any, Tuple, AsyncGenerator
-import pandas as pd # Will be removed if validation fully moves to Polars
-from dataclasses import asdict # Will be removed if validation fully moves to Polars
 import polars as pl # Added for type hinting and direct use
 
 from ...domain.entities.well_production import WellProduction

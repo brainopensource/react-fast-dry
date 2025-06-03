@@ -13,6 +13,8 @@ react-fast-v9/
 │   ├── __init__.py                        # Package initializer
 │   ├── main.py                           # FastAPI application entry point
 │   ├── favicon.ico                       # Application favicon
+│   ├── dbt_development_plan.md           # DBT development documentation
+│   ├── temp/                             # Temporary processing files
 │   │
 │   ├── domain/                           # DOMAIN LAYER (Core Business Logic)
 │   │   ├── __init__.py                   # Domain package initializer
@@ -22,10 +24,8 @@ react-fast-v9/
 │   │   ├── value_objects/                # Immutable Value Objects
 │   │   │   └── __init__.py               # Value objects package
 │   │   ├── repositories/                 # Repository Interfaces (Ports)
-│   │   │   ├── __init__.py               # Repository package
-│   │   │   ├── well_production_repository.py  # Repository interface
-│   │   │   └── ports.py                  # Repository port definitions
-│   │   └── ports/                        # Domain Ports (for future use)
+│   │   │   └── __init__.py               # Repository package
+│   │   └── ports/                        # Domain Ports
 │   │       └── __init__.py               # Ports package
 │   │
 │   ├── application/                      # APPLICATION LAYER (Use Cases & Services)
@@ -35,6 +35,7 @@ react-fast-v9/
 │   │       ├── base.py                   # Base service class
 │   │       ├── well_production_service.py        # Core well production service
 │   │       ├── well_production_import_service.py # Import service implementation
+│   │       ├── odata_well_production_import_service.py # OData import service
 │   │       ├── well_production_query_service.py  # Query service implementation
 │   │       ├── external_api_service.py   # External API service
 │   │       ├── fetchers.py               # Data fetching utilities
@@ -47,14 +48,11 @@ react-fast-v9/
 │   │   │   ├── well_production_repository_impl.py      # CSV implementation
 │   │   │   └── duckdb_well_production_repository.py    # DuckDB implementation with CSV export
 │   │   ├── db/                          # Database Configurations
-│   │   │   ├── __init__.py               # DB package
-│   │   │   └── duckdb_repo.py            # DuckDB repository implementation
+│   │   │   └── __init__.py               # DB package
 │   │   ├── external/                     # External Service Adapters
-│   │   │   ├── __init__.py               # External package
-│   │   │   └── pandas_csv_exporter.py    # CSV export functionality
+│   │   │   └── __init__.py               # External package
 │   │   ├── operations/                   # Data Operations & SQL
-│   │   │   ├── __init__.py               # Operations package
-│   │   │   └── wells.sql                 # SQL queries for well operations
+│   │   │   └── __init__.py               # Operations package
 │   │   └── adapters/                     # Infrastructure Adapters
 │   │       └── __init__.py               # Adapters package
 │   │
@@ -79,55 +77,70 @@ react-fast-v9/
 │   │   │   ├── settings.py               # Application settings
 │   │   │   └── datasets_config.py        # Dataset configuration
 │   │   └── utils/                        # Utility Functions
-│   │       ├── __init__.py               # Utils package
-│   │       └── sql_loader.py             # SQL file loading utility
+│   │       └── __init__.py               # Utils package
 │   │
-│   ├── api/                              # Additional API Components
-│   │   └── __init__.py                   # API package
-│   │
-│   └── temp/                             # Temporary Processing Files
-│       └── (temporary files)
+│   └── api/                              # Additional API Components
+│       └── __init__.py                   # API package
 │
-├── frontend/                             # API CLIENT FOR TESTING
+├── frontend/                             # FRONTEND APPLICATION
 │   ├── __init__.py                       # Frontend package initializer
-│   ├── requirements.txt                  # Frontend dependencies
-│   ├── README.md                        # Frontend documentation
-│   ├── client.py                        # Comprehensive API client
-│   ├── test_health.py                   # Health endpoint test
-│   ├── test_import.py                   # Import endpoint test
-│   ├── test_stats.py                    # Stats endpoint test
-│   ├── test_well_59806.py               # Specific well test
-│   ├── test_field_8908.py               # Specific field test
-│   └── downloads/                       # Downloaded files storage
-│       └── (generated CSV files)
-│
-├── external/                            # EXTERNAL DATA
-│   └── mocked_response.json            # Sample well production data
-│
-├── data/                               # GENERATED DATA STORAGE
-│   └── wells_production.duckdb         # DuckDB database file
-│
-├── temp/                               # TEMPORARY FILES
-│   └── (temporary processing files)
-│
-├── downloads/                          # DOWNLOAD STORAGE
-│   └── (on-demand CSV exports)
-│
-├── logs/                               # APPLICATION LOGS
-│   └── wells_api.log                   # Application log file
+│   ├── app.py                           # Main Streamlit application
+│   ├── app copy.py                      # Backup application file
+│   ├── front_requirements.txt           # Frontend dependencies
+│   ├── front_dev_plan.md               # Frontend development plan
+│   ├── src/                            # Frontend source code
+│   ├── downloads/                      # Downloaded files storage
+│   └── fenv/                           # Frontend virtual environment
 │
 ├── tests/                              # TEST SUITE
-│   └── (test files)
+│   ├── __init__.py                     # Test package initializer
+│   ├── conftest.py                     # Pytest configuration
+│   ├── pytest.ini                     # Pytest settings
+│   ├── test_requirements.txt           # Test dependencies
+│   ├── run_tests.py                    # Test runner script
+│   ├── run_basic_test.py              # Basic test runner
+│   ├── test_async.py                  # Async tests
+│   ├── counter.py                     # Test counter utilities
+│   ├── dedup_json.py                  # JSON deduplication utilities
+│   ├── create_json.py                 # JSON creation utilities
+│   ├── api/                           # API tests
+│   ├── unit/                          # Unit tests
+│   ├── integration/                   # Integration tests
+│   └── utils/                         # Test utilities
 │
-├── requirements.txt                     # Python Dependencies
-├── pyproject.toml                      # Project Configuration
-├── uv.lock                            # UV Package Lock File
-├── run.py                             # Application runner script
-├── jobs.json                          # Job configuration
-├── README.md                          # Project Documentation
-├── developer_guide.md                 # Development Guidelines
-├── user_guide.md                      # User Documentation
-└── SQL_QUERIES_DESIGN.md             # SQL Design Documentation
+├── external/                          # EXTERNAL DATA
+│   ├── mocked_response.json          # Large sample well production data (1.1GB)
+│   ├── mocked_response_100K.json     # Medium sample data (108MB)
+│   ├── mocked_response_copy.json     # Small sample data copy
+│   └── mocked_response_old.json      # Legacy sample data
+│
+├── data/                             # GENERATED DATA STORAGE
+│   └── .gitkeep                      # Keep directory in git
+│
+├── temp/                             # TEMPORARY FILES
+│   └── (temporary processing files)
+│
+├── downloads/                        # DOWNLOAD STORAGE
+│   └── (on-demand CSV exports)
+│
+├── logs/                             # APPLICATION LOGS
+│   └── wells_api.log                 # Application log file
+│
+├── .venv/                            # Python Virtual Environment
+├── test_venv/                        # Test Virtual Environment
+├── __pycache__/                      # Python Cache Files
+├── .git/                             # Git Repository
+├── .cursor/                          # Cursor IDE Configuration
+│
+├── requirements.txt                   # Python Dependencies
+├── pyproject.toml                    # Project Configuration
+├── uv.lock                          # UV Package Lock File
+├── .python-version                  # Python Version File
+├── jobs.json                        # Job configuration
+├── .gitignore                       # Git ignore rules
+├── README.md                        # Project Documentation
+├── developer_guide.md               # Development Guidelines
+└── user_guide.md                    # User Documentation
 ```
 
 ## 🚀 Features

@@ -31,6 +31,12 @@ This guide provides instructions for setting up, using, and contributing to the 
    ```bash
    poetry run uvicorn main:app --reload
    ```
+   or
+
+   ```bash
+   uv run uvicorn src.main:app --host 0.0.0.0 --port 8080
+   ```
+
 
 2. **Access the API**:
    - Open your browser and navigate to `http://localhost:8000/docs` to view the API documentation.
