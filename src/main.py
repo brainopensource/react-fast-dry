@@ -16,15 +16,16 @@ from src.shared.dependencies import configure_dependencies
 from src.interfaces.api.well_production_routes import router as well_production_router
 
 # Ensure logs directory exists
-Path("logs").mkdir(exist_ok=True)
+settings = get_settings()
+Path(settings.LOGS_DIR_NAME).mkdir(exist_ok=True)
 
 # Configure logging with both console and file handlers
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.LOG_LEVEL),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/wells_api.log", mode="a")
+        logging.FileHandler(f"{settings.LOGS_DIR_NAME}/{settings.LOG_FILENAME}", mode="a")
     ]
 )
 logger = logging.getLogger(__name__)
@@ -33,26 +34,23 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan management."""
     logger.info("Starting Well Production API...")
-    settings = get_settings()
-
-    # Ensure data directory exists
+    settings = get_settings()    # Ensure data directory exists
     Path(settings.DATA_ROOT_DIR).mkdir(parents=True, exist_ok=True)
-    Path("downloads").mkdir(parents=True, exist_ok=True)
-    Path("temp").mkdir(parents=True, exist_ok=True)
+    Path(settings.DOWNLOADS_DIR_NAME).mkdir(parents=True, exist_ok=True)
+    Path(settings.TEMP_DIR_NAME).mkdir(parents=True, exist_ok=True)
 
     app_config = {
         "external_api": {
-            "base_url": settings.API_BASE_URL,
-            "api_key": settings.API_KEY,
-            "mock_mode": settings.ENV != "production", # Example: mock_mode is False if ENV is production
+            "base_url": settings.ODATA_BASE_URL,
+            "mock_mode": settings.USE_MOCK_DATA,  # Explicit control over mock mode
             "mock_file_path": str(settings.MOCKED_RESPONSE_PATH),
-            "timeout_seconds": 30, # Or make these configurable too
-            "max_retries": 3,
-            "retry_delay_seconds": 1.0
+            "timeout_seconds": settings.EXTERNAL_API_TIMEOUT_SECONDS,
+            "max_retries": settings.EXTERNAL_API_MAX_RETRIES,
+            "retry_delay_seconds": settings.EXTERNAL_API_RETRY_DELAY_SECONDS
         },
         "repository_paths": { # Add a new section for repository paths
             "data_dir": str(settings.DATA_ROOT_DIR),
-            "downloads_dir": "downloads",
+            "downloads_dir": settings.DOWNLOADS_DIR_NAME,
             "duckdb_filename": settings.DUCKDB_FILENAME,
             "csv_filename": settings.CSV_EXPORT_FILENAME
         },
@@ -63,9 +61,9 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Well Production API...")
 
 app = FastAPI(
-    title="Well Production API",
-    description="High-performance API for managing millions of well production records using DuckDB with on-demand CSV export",
-    version="1.0.0",
+    title=settings.API_TITLE,
+    description=settings.API_DESCRIPTION,
+    version=settings.API_VERSION,
     lifespan=lifespan
 )
 
@@ -88,8 +86,8 @@ app.include_router(well_production_router)
 async def root():
     """API root endpoint with information."""
     return {
-        "message": "Well Production API",
-        "version": "1.0.0",
+        "message": settings.API_TITLE,
+        "version": settings.API_VERSION,
         "features": {
             "storage": "DuckDB primary storage with on-demand CSV export",
             "performance": "Optimized for millions of records",
@@ -111,7 +109,7 @@ async def health_check():
     return {
         "status": "healthy", 
         "service": "well-production-api",
-        "version": "1.0.0",
+        "version": settings.API_VERSION,
         "database": "duckdb",
         "timestamp": datetime.now().isoformat()
     }
@@ -123,4 +121,4 @@ app.mount("/", StaticFiles(directory=".", html=True), name="root")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    uvicorn.run(app, host=settings.SERVER_HOST, port=settings.SERVER_PORT)

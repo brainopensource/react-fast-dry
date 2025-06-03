@@ -10,30 +10,35 @@ from ...domain.entities.well_production import WellProduction
 from ...domain.repositories.well_production_repository import WellProductionRepository
 from ...shared.utils.sql_loader import load_sql
 from ...shared.utils.timing_decorator import async_timed, timed
+from ...shared.config.settings import get_settings
 
 class DuckDBWellProductionRepository(WellProductionRepository):
     """DuckDB implementation of the well production repository with on-demand CSV export."""
     
-    # Bulk processing configuration for CSV export
-    BATCH_SIZE = 100_000  # Number of records per batch
-    MEMORY_LIMIT = "6GB"  # Leave 2GB for system and other processes
-    THREADS = 4  # Number of threads for parallel processing
-    TEMP_DIR = Path("temp")  # Directory for temporary files during export
-    
     def __init__(
         self, 
-        db_path: Path = Path("data/wells_production.duckdb"), 
-        sql_path: Path = None,
-        downloads_dir: Path = Path("downloads"),
-        csv_filename: str = "wells_prod.csv"
+        db_path: Optional[Path] = None, 
+        sql_path: Optional[Path] = None,
+        downloads_dir: Optional[Path] = None,
+        csv_filename: Optional[str] = None
     ):
-        self.db_path = db_path
+        # Get settings for default values
+        settings = get_settings()
+        
+        # Use settings defaults if not provided
+        self.db_path = db_path if db_path is not None else settings.DB_PATH
         self.db_path.parent.mkdir(exist_ok=True)
         
-        # CSV export configuration
-        self.downloads_dir = downloads_dir
+        # CSV export configuration from settings
+        self.downloads_dir = downloads_dir if downloads_dir is not None else Path(settings.DOWNLOADS_DIR_NAME)
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        self.csv_path = self.downloads_dir / csv_filename
+        self.csv_path = self.downloads_dir / (csv_filename if csv_filename is not None else settings.DEFAULT_CSV_FILENAME)
+        
+        # DuckDB export configuration from settings
+        self.BATCH_SIZE = settings.DUCKDB_EXPORT_BATCH_SIZE
+        self.MEMORY_LIMIT = settings.DUCKDB_EXPORT_MEMORY_LIMIT
+        self.THREADS = settings.DUCKDB_EXPORT_THREADS
+        self.TEMP_DIR = Path(settings.TEMP_DIR_NAME)
         self.TEMP_DIR.mkdir(parents=True, exist_ok=True)
         
         # Load SQL queries from file
