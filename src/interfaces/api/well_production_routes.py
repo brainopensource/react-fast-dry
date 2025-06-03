@@ -215,7 +215,7 @@ async def download_well_production(
             )
         
         return FileResponse(
-            path=csv_path,
+            path=str(csv_path),
             filename="wells_production.csv",
             media_type="text/csv",
             headers={

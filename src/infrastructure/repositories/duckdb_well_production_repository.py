@@ -244,11 +244,14 @@ class DuckDBWellProductionRepository(WellProductionRepository):
         """Convert a WellProduction entity to a list of parameters for SQL queries."""
         return [getattr(well_production, col) for col in WellProductionSchema.get_column_names()]
     
-    def _row_to_entity(self, row: dict) -> WellProduction:
+    def _row_to_entity(self, row: tuple) -> WellProduction:
         """Convert a database row to a WellProduction entity."""
-        return WellProduction(
-            **{col: row[col] for col in WellProductionSchema.get_column_names()}
-        )
+        # Get column names in the correct order
+        columns = WellProductionSchema.get_column_names()
+        # Create a dictionary mapping column names to values
+        row_dict = dict(zip(columns, row))
+        # Create the entity
+        return WellProduction(**row_dict)
 
     @timed
     def _export_to_csv_sync(self) -> Path:
@@ -270,9 +273,9 @@ class DuckDBWellProductionRepository(WellProductionRepository):
                     COPY (
                         SELECT 
                             field_code::VARCHAR as field_code,
-                            field_name,
+                            _field_name as field_name,
                             well_code::VARCHAR as well_code,
-                            well_reference,
+                            _well_reference as well_reference,
                             well_name,
                             production_period,
                             days_on_production::VARCHAR as days_on_production,
@@ -317,9 +320,9 @@ class DuckDBWellProductionRepository(WellProductionRepository):
                         COPY (
                             SELECT 
                                 field_code::VARCHAR as field_code,
-                                field_name,
+                                _field_name as field_name,
                                 well_code::VARCHAR as well_code,
-                                well_reference,
+                                _well_reference as well_reference,
                                 well_name,
                                 production_period,
                                 days_on_production::VARCHAR as days_on_production,
@@ -369,12 +372,13 @@ class DuckDBWellProductionRepository(WellProductionRepository):
     async def export_to_csv(self) -> Path:
         """Export all data from DuckDB to CSV for download using DuckDB's native export."""
         try:
-            return await asyncio.to_thread(self._export_to_csv_sync)
+            csv_path = await asyncio.to_thread(self._export_to_csv_sync)
+            return Path(csv_path)
         except Exception as e:
             # Fallback to the old method if DuckDB export fails
             well_productions = await self.get_all()
             await self._bulk_save_to_csv(well_productions, overwrite=True)
-            return self.csv_filename
+            return Path(self.csv_filename)
 
     def _get_fieldnames(self) -> List[str]:
         """Get CSV fieldnames in the correct order."""
