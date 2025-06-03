@@ -16,14 +16,12 @@ from fastapi.responses import FileResponse
 from ...application.services.well_production_import_service import WellProductionImportService
 from ...application.services.well_production_query_service import WellProductionQueryService
 from ...application.services.odata_well_production_import_service import ODataWellProductionImportService
-# from ...application.services.well_production_service import WellProductionService as DataQualityService # Only if a route uses DataQualityService
 
 # Updated dependency imports
 from ...shared.dependencies import (
     provide_well_production_import_service,
     provide_well_production_query_service,
     provide_odata_well_production_import_service,
-    # provide_well_production_data_quality_service # Only if a route uses DataQualityService
 )
 from ...shared.exceptions import (
     ApplicationException, 
@@ -51,96 +49,6 @@ job_manager = JobManager()
 async def get_request_id(request: Request) -> str:
     """Generate or extract request ID for tracing"""
     return request.headers.get("X-Request-ID", str(uuid.uuid4()))
-
-
-@router.post("/import", status_code=status.HTTP_201_CREATED, response_model=SuccessResponse)
-@async_timed
-async def import_well_production(
-    request: Request,
-    filters: Optional[dict] = None,
-    service: WellProductionImportService = Depends(provide_well_production_import_service), # Updated
-    request_id: str = Depends(get_request_id)
-):
-    """
-    Import well production data from external source with batch processing.
-    
-    This endpoint imports data using optimized batch processing with memory management.
-    Supports millions of records efficiently with comprehensive error handling.
-    Accepts optional filters in the request body for selective importing.
-    """
-    start_time = time.time()
-    
-    try:
-        logger.info(f"Starting import request {request_id}")
-        
-        # Generate batch ID for tracking
-        batch_id = f"import_{request_id}_{int(time.time())}"
-        
-        # Import data using the service
-        result = await service.import_production_data(
-            filters=filters,
-            batch_id=batch_id
-        )
-        
-        execution_time_ms = (time.time() - start_time) * 1000
-        
-        # Extract metadata for enhanced messaging
-        metadata = result.metadata or {}
-        new_records = metadata.get('new_records', result.processed_items)
-        duplicate_records = metadata.get('duplicate_records', 0)
-        data_status = metadata.get('data_status', 'unknown')
-        
-        # Create appropriate message based on import results
-        if data_status == 'no_new_data':
-            message = f"No new data to import - all {result.total_items} records already exist in the system"
-        elif new_records > 0 and duplicate_records > 0:
-            message = f"Successfully imported {new_records} new records, skipped {duplicate_records} duplicates out of {result.total_items} total records"
-        elif new_records > 0:
-            message = f"Successfully imported {new_records} out of {result.total_items} records"
-        else:
-            message = f"Import completed but no new records were added"
-        
-        return ResponseBuilder.success(
-            data={
-                "batch_result": result.model_dump(),
-                "import_summary": {
-                    "total_records": result.total_items,
-                    "successful_records": new_records,
-                    "failed_records": result.failed_items,
-                    "duplicate_records": duplicate_records,
-                    "success_rate": result.success_rate,
-                    "batch_id": batch_id,
-                    "data_status": data_status
-                },
-                "performance": {
-                    "execution_time_seconds": execution_time_ms / 1000,
-                    "memory_usage_mb": result.memory_usage_mb,
-                    "throughput_records_per_second": (
-                        new_records / (execution_time_ms / 1000)
-                        if execution_time_ms > 0 else 0
-                    )
-                }
-            },
-            message=message,
-            request_id=request_id,
-            execution_time_seconds=execution_time_ms / 1000
-        )
-        
-    except ValidationException as e:
-        logger.warning(f"Validation error in import {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
-        
-    except ApplicationException as e:
-        logger.error(f"Application error in import {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
-        
-    except Exception as e:
-        logger.error(f"Unexpected error in import {request_id}: {str(e)}", exc_info=True)
-        error = ApplicationException(
-            message=f"Unexpected error during import: {str(e)}",
-            cause=e
-        )
-        return ResponseBuilder.error(error, request_id=request_id)
 
 
 @router.get("/import/trigger", status_code=status.HTTP_200_OK, response_model=SuccessResponse)
@@ -285,7 +193,7 @@ async def get_import_status(
 @async_timed
 async def download_well_production(
     request: Request,
-    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated, assuming QueryService provides repository access
+    service: WellProductionQueryService = Depends(provide_well_production_query_service),
     request_id: str = Depends(get_request_id)
 ):
     """
@@ -296,9 +204,8 @@ async def download_well_production(
     try:
         logger.info(f"Starting download request {request_id}")
         
-        # Get repository and export to CSV
-        repository = service.repository
-        csv_path = await repository.export_to_csv()
+        # Export to CSV using the service
+        csv_path = await service.export_to_csv()
         
         if not csv_path.exists():
             raise ValidationException(
@@ -308,7 +215,7 @@ async def download_well_production(
             )
         
         return FileResponse(
-            path=csv_path,
+            path=str(csv_path),
             filename="wells_production.csv",
             media_type="text/csv",
             headers={
@@ -331,48 +238,13 @@ async def download_well_production(
         return ResponseBuilder.error(error, request_id=request_id)
 
 
-@router.get("/stats", response_model=SuccessResponse)
-async def get_well_production_stats(
-    request: Request,
-    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
-    request_id: str = Depends(get_request_id)
-):
-    """Get comprehensive statistics about the well production data."""
-    start_time = time.time()
-    
-    try:
-        logger.info(f"Getting stats for request {request_id}")
-        
-        stats = await service.get_production_statistics()
-        execution_time_ms = (time.time() - start_time) * 1000
-        
-        return ResponseBuilder.success(
-            data=stats,
-            message="Statistics retrieved successfully",
-            request_id=request_id,
-            execution_time_seconds=execution_time_ms / 1000
-        )
-        
-    except ApplicationException as e:
-        logger.error(f"Error getting stats {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
-        
-    except Exception as e:
-        logger.error(f"Unexpected error getting stats {request_id}: {str(e)}", exc_info=True)
-        error = ApplicationException(
-            message=f"Unexpected error getting statistics: {str(e)}",
-            cause=e
-        )
-        return ResponseBuilder.error(error, request_id=request_id)
-
-
 @router.get("/well/{well_code}", response_model=SuccessResponse)
 async def get_well_by_code(
     well_code: int,
     request: Request,
     period_start: Optional[str] = None,
     period_end: Optional[str] = None,
-    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
+    service: WellProductionQueryService = Depends(provide_well_production_query_service),
     request_id: str = Depends(get_request_id)
 ):
     """Get well production data by well code with optional date filtering."""
@@ -432,9 +304,7 @@ async def get_well_by_code(
                     "oil_production_kbd": well.oil_production_kbd,
                     "gas_production_mmcfd": well.gas_production_mmcfd,
                     "liquids_production_kbd": well.liquids_production_kbd,
-                    "water_production_kbd": well.water_production_kbd,
-                    "total_production_kbd": well.calculate_total_production(),
-                    "is_producing": well.is_producing()
+                    "water_production_kbd": well.water_production_kbd
                 },
                 "metadata": {
                     "production_period": well.production_period,
@@ -451,7 +321,7 @@ async def get_well_by_code(
             },
             message=f"Found {len(wells_data)} records for well {well_code}",
             request_id=request_id,
-            execution_time_seconds=execution_time_ms / 1000
+            execution_time_ms=execution_time_ms
         )
         
     except ValidationException as e:
@@ -466,82 +336,6 @@ async def get_well_by_code(
         logger.error(f"Unexpected error getting well {well_code} {request_id}: {str(e)}", exc_info=True)
         error = ApplicationException(
             message=f"Unexpected error getting well: {str(e)}",
-            cause=e
-        )
-        return ResponseBuilder.error(error, request_id=request_id)
-
-
-@router.get("/field/{field_code}", response_model=SuccessResponse)
-async def get_wells_by_field(
-    field_code: int,
-    request: Request,
-    limit: Optional[int] = None,
-    service: WellProductionQueryService = Depends(provide_well_production_query_service), # Updated
-    request_id: str = Depends(get_request_id)
-):
-    """Get all wells for a specific field with optional limit."""
-    start_time = time.time()
-    
-    try:
-        logger.info(f"Getting field {field_code} wells for request {request_id}")
-        
-        wells = await service.get_production_by_field(
-            field_code=field_code,
-            limit=limit
-        )
-        
-        if not wells:
-            raise ValidationException(
-                message=f"No wells found for field code {field_code}",
-                field="field_code",
-                value=field_code,
-                status_code_override=status.HTTP_404_NOT_FOUND
-            )
-        
-        execution_time_ms = (time.time() - start_time) * 1000
-        
-        # Prepare summary data
-        field_summary = {
-            "field_code": field_code,
-            "field_name": wells[0].field_name if wells else None,
-            "wells_count": len(wells),
-            "total_production": sum(well.calculate_total_production() for well in wells),
-            "active_wells": sum(1 for well in wells if well.is_producing())
-        }
-        
-        # Prepare wells data
-        wells_data = []
-        for well in wells:
-            wells_data.append({
-                "well_code": well.well_code,
-                "well_name": well.well_name,
-                "production_period": well.production_period,
-                "total_production_kbd": well.calculate_total_production(),
-                "is_producing": well.is_producing()
-            })
-        
-        return ResponseBuilder.success(
-            data={
-                "field_summary": field_summary,
-                "wells": wells_data
-            },
-            message=f"Found {len(wells)} wells for field {field_code}",
-            request_id=request_id,
-            execution_time_seconds=execution_time_ms / 1000
-        )
-        
-    except ValidationException as e:
-        logger.warning(f"Validation error for field {field_code} {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
-        
-    except ApplicationException as e:
-        logger.error(f"Error getting field {field_code} {request_id}: {e.message}")
-        return ResponseBuilder.error(e, request_id=request_id)
-        
-    except Exception as e:
-        logger.error(f"Unexpected error getting field {field_code} {request_id}: {str(e)}", exc_info=True)
-        error = ApplicationException(
-            message=f"Unexpected error getting field wells: {str(e)}",
             cause=e
         )
         return ResponseBuilder.error(error, request_id=request_id)

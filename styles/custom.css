@@ -1,0 +1,118 @@
+body {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+}
+.swagger-ui {
+    background-color: #1a1a1a !important;
+    color: #ffffff !important;
+}
+.swagger-ui .opblock {
+    background-color: #2d2d2d !important;
+    border-color: #404040 !important;
+}
+.swagger-ui .opblock .opblock-summary {
+    border-color: #404040 !important;
+}
+.swagger-ui .opblock .opblock-summary-method {
+    background-color: #404040 !important;
+}
+.swagger-ui .opblock-description-wrapper p {
+    color: #ffffff !important;
+}
+.swagger-ui .info .title {
+    color: #ffffff !important;
+}
+.swagger-ui .info .description {
+    color: #ffffff !important;
+}
+.swagger-ui .info .base-url {
+    color: #ffffff !important;
+}
+.swagger-ui .scheme-container {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label {
+    color: #ffffff !important;
+}
+.swagger-ui .topbar .download-url-wrapper input {
+    background-color: #404040 !important;
+    color: #ffffff !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label {
+    color: #ffffff !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select {
+    background-color: #404040 !important;
+    color: #ffffff !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label span {
+    color: #ffffff !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select {
+    border-color: #404040 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option {
+    background-color: #2d2d2d !important;
+    color: #ffffff !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:hover {
+    background-color: #404040 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:checked {
+    background-color: #404040 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:focus {
+    background-color: #404040 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:active {
+    background-color: #404040 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:selected {
+    background-color: #404040 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled {
+    background-color: #2d2d2d !important;
+    color: #808080 !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:hover {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:focus {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:active {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:selected {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:hover {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:focus {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:active {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:selected {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:selected:hover {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:selected:focus {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:selected:active {
+    background-color: #2d2d2d !important;
+}
+.swagger-ui .topbar .download-url-wrapper .select-label select option:disabled:checked:selected:selected {
+    background-color: #2d2d2d !important;
+}

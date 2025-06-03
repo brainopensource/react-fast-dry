@@ -8,62 +8,6 @@ import pytest
 class TestWellEndpoints:
     """Test class for well production endpoints."""
 
-    def test_import_wells_endpoint(self, test_client, api_endpoints, test_assertions):
-        """Test the wells import endpoint."""
-        # Act
-        response = test_client.post(api_endpoints["import"])
-        
-        # Assert - Import should return 201 Created
-        data = test_assertions.assert_successful_response(response, 201)
-        
-        # Verify response structure - actual API returns success, data, metadata
-        test_assertions.assert_json_structure(data, ["success", "data", "metadata"])
-        
-        # Verify success flag
-        assert data["success"] is True
-        
-        # Verify data structure
-        data_section = data.get("data", {})
-        assert "import_summary" in data_section
-        assert "performance" in data_section
-        
-        # Verify import summary structure
-        import_summary = data_section.get("import_summary", {})
-        assert "total_records" in import_summary
-        assert "successful_records" in import_summary
-        assert "duplicate_records" in import_summary
-        
-        # Verify data types
-        assert isinstance(import_summary["total_records"], int)
-        assert isinstance(import_summary["successful_records"], int)
-        assert isinstance(import_summary["duplicate_records"], int)
-        assert import_summary["total_records"] >= 0
-        assert import_summary["successful_records"] >= 0
-        assert import_summary["duplicate_records"] >= 0
-        
-        # Storage info is no longer returned in import response since CSV is created on-demand
-        # The import now only updates DuckDB storage
-
-    def test_get_stats_endpoint(self, test_client, api_endpoints, test_assertions):
-        """Test the wells statistics endpoint."""
-        # Act
-        response = test_client.get(api_endpoints["stats"])
-        
-        # Assert
-        data = test_assertions.assert_successful_response(response, 200)
-        
-        # Verify response structure - stats are now nested under data
-        test_assertions.assert_json_structure(data, ["success", "data", "metadata"])
-        
-        # Verify data section structure
-        data_section = data.get("data", {})
-        assert "total_records" in data_section
-        assert "external_api_status" in data_section
-        
-        # Verify data types
-        assert isinstance(data_section["total_records"], int)
-        assert data_section["total_records"] >= 0
-
     def test_get_well_by_code(self, test_client, api_endpoints, sample_well_code, test_assertions):
         """Test getting a specific well by code."""
         # Act
