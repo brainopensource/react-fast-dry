@@ -64,9 +64,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Mount static files under /static path
-app.mount("/static", StaticFiles(directory="src", html=True), name="static")
-
 # Fetch settings for CORS configuration
 settings = get_settings()
 
@@ -113,3 +110,8 @@ async def health_check():
         "database": "duckdb",
         "timestamp": datetime.now().isoformat()
     }
+
+# Mount static files after all routes are defined
+app.mount("/static", StaticFiles(directory="src", html=True), name="static")
+# Mount root directory for favicon and other root-level static files
+app.mount("/", StaticFiles(directory=".", html=True), name="root")

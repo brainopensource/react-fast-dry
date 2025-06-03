@@ -6,9 +6,8 @@ import logging
 import asyncio
 from typing import List, Dict, Any, Optional, AsyncGenerator
 from datetime import datetime
-import httpx
+#import httpx
 from requests.auth import HTTPBasicAuth
-import requests
 import polars as pl
 
 from ...domain.ports.odata_external_api_port import ODataExternalApiPort
