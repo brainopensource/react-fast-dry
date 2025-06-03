@@ -142,10 +142,9 @@ class ODataWellProductionImportService:
         dataframe_to_validate = self._apply_field_name_mapping(dataframe_to_validate)
 
         # Apply type casting and schema validation
-        dataframe_to_validate = self._apply_type_casting_and_schema(dataframe_to_validate)
-
-        # Apply business rule validations
-        validated_dataframe, business_rule_errors = self._apply_business_rule_validations(dataframe_to_validate)
+        dataframe_to_validate = self._apply_type_casting_and_schema(dataframe_to_validate)        # Apply business rule validations
+        business_rule_validator = BusinessRuleValidator()
+        validated_dataframe, business_rule_errors = business_rule_validator.validate_dataframe(dataframe_to_validate)
         validation_errors.extend(business_rule_errors)
 
         logger.info(f"Polars validation: Input rows: {production_dataframe.height}, "
@@ -433,6 +432,11 @@ class TargetSchema:
 class BusinessRuleValidator:
     """Validates business rules for well production data."""
     
+    def __init__(self):
+        """Initialize validator with settings from configuration."""
+        from ...shared.config.settings import get_settings
+        self.settings = get_settings()
+    
     def validate_dataframe(self, dataframe: pl.DataFrame) -> Tuple[pl.DataFrame, List[Dict[str, Any]]]:
         """Validate dataframe against business rules."""
         errors = []
@@ -473,16 +477,14 @@ class BusinessRuleValidator:
     def _validate_days_on_production(self, dataframe: pl.DataFrame) -> Tuple[pl.DataFrame, List[Dict[str, Any]]]:
         """Validate that days on production is non-negative."""
         errors = []
-        
-        if "days_on_production" in dataframe.columns and dataframe["days_on_production"].dtype == pl.Int64:
-            invalid_condition = pl.col("days_on_production") < 0
+          if "days_on_production" in dataframe.columns and dataframe["days_on_production"].dtype == pl.Int64:
+            invalid_condition = pl.col("days_on_production") < self.settings.VALIDATION_MIN_DAYS_ON_PRODUCTION
             invalid_rows = dataframe.filter(invalid_condition)
             
             if not invalid_rows.is_empty():
-                for row_dict in invalid_rows.to_dicts():
-                    errors.append({
+                for row_dict in invalid_rows.to_dicts():                    errors.append({
                         "error_type": "InvalidDaysOnProduction",
-                        "message": f"days_on_production is negative ({row_dict.get('days_on_production')})",
+                        "message": f"days_on_production ({row_dict.get('days_on_production')}) is below minimum threshold ({self.settings.VALIDATION_MIN_DAYS_ON_PRODUCTION})",
                         "data": {
                             "well_code": row_dict.get('well_code'),
                             "field_code": row_dict.get('field_code'),

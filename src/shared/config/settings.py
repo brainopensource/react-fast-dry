@@ -26,16 +26,27 @@ class Settings(BaseSettings):
 
     # External API configuration
     API_BASE_URL: Optional[str] = os.getenv("API_BASE_URL")
-    API_KEY: Optional[str] = os.getenv("API_KEY")
-
-    # OData External API configuration
+    API_KEY: Optional[str] = os.getenv("API_KEY")    # OData External API configuration
     ODATA_BASE_URL: Optional[str] = os.getenv("ODATA_BASE_URL", "https://example.com/odata")
     ODATA_USERNAME: Optional[str] = os.getenv("ODATA_USERNAME", "dev_user")
     ODATA_PASSWORD: Optional[str] = os.getenv("ODATA_PASSWORD", "dev_password")
-    ODATA_TIMEOUT_SECONDS: int = int(os.getenv("ODATA_TIMEOUT_SECONDS", "60"))
-    ODATA_MAX_RETRIES: int = int(os.getenv("ODATA_MAX_RETRIES", "3"))
-    ODATA_RETRY_DELAY_SECONDS: float = float(os.getenv("ODATA_RETRY_DELAY_SECONDS", "2.0"))
-    ODATA_MAX_RECORDS_PER_REQUEST: int = int(os.getenv("ODATA_MAX_RECORDS_PER_REQUEST", "1001"))
+    ODATA_TIMEOUT_SECONDS: int = 60
+    ODATA_MAX_RETRIES: int = 3
+    ODATA_RETRY_DELAY_SECONDS: float = 2.0
+    ODATA_MAX_RECORDS_PER_REQUEST: int = 998    # Batch Processing Configuration
+    BATCH_SIZE: int = 1000
+    BATCH_MAX_MEMORY_MB: float = 6000.0
+    BATCH_GC_THRESHOLD_MB: float = 4000.0
+    BATCH_MAX_CONCURRENT_BATCHES: int = 3
+    BATCH_RETRY_ATTEMPTS: int = 3
+    BATCH_RETRY_DELAY_SECONDS: float = 1.0
+    BATCH_ENABLE_MEMORY_MONITORING: bool = True
+
+    # Validation Configuration
+    VALIDATION_MIN_DAYS_ON_PRODUCTION: int = 0
+    VALIDATION_MAX_DAYS_ON_PRODUCTION: int = 365
+    VALIDATION_MIN_PRODUCTION_VALUE: float = 0.0
+    VALIDATION_MAX_PRODUCTION_VALUE: float = 999999.0
 
     # Configurable data paths
     DATA_ROOT_DIR: Path = APP_DIR / os.getenv("DATA_ROOT_DIR_NAME", "data")

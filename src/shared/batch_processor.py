@@ -21,6 +21,8 @@ except ImportError:
 
 from .exceptions import BatchProcessingException, MemoryException
 from .responses import ErrorDetail, BatchResult
+from .config.settings import get_settings
+from .config.settings import get_settings
 
 T = TypeVar('T')
 R = TypeVar('R')
@@ -28,16 +30,51 @@ R = TypeVar('R')
 logger = logging.getLogger(__name__)
 
 
+def create_batch_config_from_settings() -> 'BatchConfig':
+    """Create BatchConfig using settings from configuration."""
+    from .config.settings import get_settings
+    settings = get_settings()
+    
+    return BatchConfig(
+        batch_size=settings.BATCH_SIZE,
+        max_memory_mb=settings.BATCH_MAX_MEMORY_MB,
+        max_concurrent_batches=settings.BATCH_MAX_CONCURRENT_BATCHES,
+        retry_attempts=settings.BATCH_RETRY_ATTEMPTS,
+        retry_delay_seconds=settings.BATCH_RETRY_DELAY_SECONDS,
+        enable_memory_monitoring=settings.BATCH_ENABLE_MEMORY_MONITORING,
+        gc_threshold_mb=settings.BATCH_GC_THRESHOLD_MB
+    )
+
+
 @dataclass
 class BatchConfig:
     """Configuration for batch processing"""
     batch_size: int = 1000
-    max_memory_mb: float = 512.0
+    max_memory_mb: float = 6000.0
     max_concurrent_batches: int = 3
     retry_attempts: int = 3
     retry_delay_seconds: float = 1.0
     enable_memory_monitoring: bool = True
-    gc_threshold_mb: float = 256.0
+    gc_threshold_mb: float = 4000.0
+
+    @classmethod
+    def from_settings(cls):
+        """Create BatchConfig from application settings"""
+        try:
+            from .config.settings import get_settings
+            settings = get_settings()
+            return cls(
+                batch_size=settings.BATCH_SIZE,
+                max_memory_mb=settings.BATCH_MAX_MEMORY_MB,
+                max_concurrent_batches=settings.BATCH_MAX_CONCURRENT_BATCHES,
+                retry_attempts=settings.BATCH_RETRY_ATTEMPTS,
+                retry_delay_seconds=settings.BATCH_RETRY_DELAY_SECONDS,
+                enable_memory_monitoring=settings.BATCH_ENABLE_MEMORY_MONITORING,
+                gc_threshold_mb=settings.BATCH_GC_THRESHOLD_MB
+            )
+        except ImportError:
+            # Fallback to defaults if settings not available
+            return cls()
 
 
 @dataclass
@@ -88,7 +125,7 @@ class BatchProcessor:
     """High-performance batch processor with memory management"""
     
     def __init__(self, config: Optional[BatchConfig] = None):
-        self.config = config or BatchConfig()
+        self.config = config or create_batch_config_from_settings()
         self.memory_monitor = MemoryMonitor()
         self._active_batches: Dict[str, BatchMetrics] = {}
     
@@ -354,4 +391,4 @@ class BatchProcessor:
             "gc_threshold_mb": self.config.gc_threshold_mb,
             "usage_percentage": (current_memory / self.config.max_memory_mb) * 100,
             "psutil_available": True
-        } 
+        }

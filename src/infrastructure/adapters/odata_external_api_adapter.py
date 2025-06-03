@@ -29,15 +29,14 @@ class ODataExternalApiAdapter(ODataExternalApiPort):
     Adapter for OData external API services with pagination support.
     Handles Basic Authentication and follows OData pagination patterns.
     """
-    
-    def __init__(
+      def __init__(
         self,
         base_url: str,
         username: str,
         password: str,
-        timeout_seconds: int = 60,
-        max_retries: int = 3,
-        retry_delay_seconds: float = 2.0,
+        timeout_seconds: int = settings.ODATA_TIMEOUT_SECONDS,
+        max_retries: int = settings.ODATA_MAX_RETRIES,
+        retry_delay_seconds: float = settings.ODATA_RETRY_DELAY_SECONDS,
         max_records_per_request: int = settings.ODATA_MAX_RECORDS_PER_REQUEST
     ):
         self.base_url = base_url.rstrip('/')
@@ -277,14 +276,13 @@ class ODataExternalApiAdapter(ODataExternalApiPort):
                 '$top': 1,
                 '$format': 'json'
             }
-            
-            response = await asyncio.get_event_loop().run_in_executor(
+              response = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: requests.get(
                     self.base_url,
                     params=test_params,
                     auth=HTTPBasicAuth(self.username, self.password),
-                    timeout=10  # Shorter timeout for connection test
+                    timeout=min(10, self.timeout_seconds)  # Use configured timeout but cap at 10s for connection test
                 )
             )
             

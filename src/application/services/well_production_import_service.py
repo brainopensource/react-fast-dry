@@ -304,17 +304,17 @@ class WellProductionImportService:
                     "message": f"Primary key component is null for data: { {k: row_dict.get(k) for k in pk_cols} }",
                     "data": {k: row_dict.get(k) for k in pk_cols} # Include only PK cols for brevity
                 })
-            df_validated = df_validated.filter(pk_null_condition.is_not()) # Keep only non-null PKs
-
-        # Rule 2: days_on_production >= 0
+            df_validated = df_validated.filter(pk_null_condition.is_not()) # Keep only non-null PKs        # Rule 2: days_on_production >= configured minimum
         if "days_on_production" in df_validated.columns and df_validated["days_on_production"].dtype == pl.Int64:
-            dop_invalid_condition = pl.col("days_on_production") < 0
+            from ...shared.config.settings import get_settings
+            settings = get_settings()
+            dop_invalid_condition = pl.col("days_on_production") < settings.VALIDATION_MIN_DAYS_ON_PRODUCTION
             invalid_dop_rows = df_validated.filter(dop_invalid_condition)
             if not invalid_dop_rows.is_empty():
                 for row_dict in invalid_dop_rows.to_dicts():
                     errors.append({
                         "error_type": "InvalidDaysOnProduction",
-                        "message": f"days_on_production is negative ({row_dict.get('days_on_production')}) for PK: ({row_dict.get('well_code')}, {row_dict.get('field_code')}, {row_dict.get('production_period')})",
+                        "message": f"days_on_production ({row_dict.get('days_on_production')}) is below minimum threshold ({settings.VALIDATION_MIN_DAYS_ON_PRODUCTION}) for PK: ({row_dict.get('well_code')}, {row_dict.get('field_code')}, {row_dict.get('production_period')})",
                         "data": { "well_code": row_dict.get('well_code'), "field_code": row_dict.get('field_code'), "production_period": row_dict.get('production_period'), "days_on_production": row_dict.get('days_on_production')}
                     })
                 df_validated = df_validated.filter(dop_invalid_condition.is_not())
