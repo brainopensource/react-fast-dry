@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Production-ready runner for the Wells Production Data API.
+Production-ready runner for the Generic Data Management API.
 This script provides different modes for running the application.
 """
 import os
@@ -19,7 +19,7 @@ def setup_logging(level: str = "INFO"):
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler("logs/wells_api.log", mode="a")
+            logging.FileHandler("logs/generic_api.log", mode="a")
         ]
     )
 
@@ -33,10 +33,11 @@ def run_development():
     # Ensure logs directory exists
     Path("logs").mkdir(exist_ok=True)
     
-    print("🚀 Starting Wells Production API in DEVELOPMENT mode...")
+    print("🚀 Starting Generic Data Management API in DEVELOPMENT mode...")
     print("📊 API Documentation: http://localhost:8080/docs")
     print("🔍 Health Check: http://localhost:8080/health")
-    print("📈 Statistics: http://localhost:8080/api/v1/wells/stats")
+    print("📈 Datasets: http://localhost:8080/api/v1/datasets")
+    print("📈 Wells Production Stats: http://localhost:8080/api/v1/wells_production/stats")
     
     uvicorn.run(
         "src.main:app",
@@ -58,9 +59,10 @@ def run_production():
     # Ensure logs directory exists
     Path("logs").mkdir(exist_ok=True)
     
-    print("🏭 Starting Wells Production API in PRODUCTION mode...")
+    print("🏭 Starting Generic Data Management API in PRODUCTION mode...")
     print("📊 API Documentation: http://localhost:8080/docs")
     print("🔍 Health Check: http://localhost:8080/health")
+    print("📈 Datasets: http://localhost:8080/api/v1/datasets")
     
     uvicorn.run(
         app,
@@ -90,6 +92,7 @@ def health_check():
                 print(f"   Status: {data.get('status', 'unknown')}")
                 print(f"   Database: {data.get('database', 'unknown')}")
                 print(f"   Version: {data.get('version', 'unknown')}")
+                print(f"   Available datasets: {data.get('available_datasets', [])}")
                 return True
             else:
                 print(f"❌ Health check failed with status {response.status_code}")
@@ -103,13 +106,36 @@ def health_check():
     print("❌ Health check FAILED after all attempts!")
     return False
 
-def test_stats():
-    """Test the statistics endpoint"""
+def test_datasets():
+    """Test the datasets list endpoint"""
     import httpx
     
-    url = "http://localhost:8080/api/v1/wells/stats"
+    url = "http://localhost:8080/api/v1/datasets"
     
-    print("📈 Testing statistics endpoint...")
+    print("📊 Testing datasets endpoint...")
+    
+    try:
+        response = httpx.get(url, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            print("✅ Datasets endpoint working!")
+            print(f"   Available datasets: {data.get('datasets', [])}")
+            return True
+        else:
+            print(f"❌ Datasets failed with status {response.status_code}")
+            print(f"   Response: {response.text}")
+    except Exception as e:
+        print(f"❌ Datasets test error: {e}")
+    
+    return False
+
+def test_stats():
+    """Test the statistics endpoint for wells_production dataset"""
+    import httpx
+    
+    url = "http://localhost:8080/api/v1/wells_production/stats"
+    
+    print("📈 Testing wells_production statistics endpoint...")
     
     try:
         response = httpx.get(url, timeout=30)
@@ -117,8 +143,7 @@ def test_stats():
             data = response.json()
             print("✅ Statistics endpoint working!")
             print(f"   Total records: {data.get('total_records', 'unknown')}")
-            print(f"   Active wells: {data.get('active_wells', 'unknown')}")
-            print(f"   External API status: {data.get('external_api_status', 'unknown')}")
+            print(f"   Dataset info: {data.get('dataset_info', {})}")
             return True
         else:
             print(f"❌ Statistics failed with status {response.status_code}")
@@ -129,23 +154,22 @@ def test_stats():
     return False
 
 def test_import():
-    """Test the import trigger endpoint"""
+    """Test the import trigger endpoint for wells_production dataset"""
     import httpx
     
-    url = "http://localhost:8080/api/v1/wells/import/trigger"
+    url = "http://localhost:8080/api/v1/wells_production/import/trigger"
     
-    print("📥 Testing import trigger endpoint...")
+    print("📥 Testing wells_production import trigger endpoint...")
     
     try:
         response = httpx.get(url, timeout=60)  # Longer timeout for import operations
         if response.status_code == 200:
             data = response.json()
             print("✅ Import trigger endpoint working!")
-            if data.get('success') and 'data' in data and 'batch_result' in data['data']:
-                batch = data['data']['batch_result']
-                print(f"   Total items: {batch.get('total_items', 'unknown')}")
-                print(f"   Processed items: {batch.get('processed_items', 'unknown')}")
-                print(f"   Success rate: {batch.get('success_rate', 'unknown')}%")
+            if data.get('success') and 'data' in data:
+                job_info = data['data']
+                print(f"   Job ID: {job_info.get('job_id', 'unknown')}")
+                print(f"   Status: {job_info.get('status', 'unknown')}")
             return True
         else:
             print(f"❌ Import trigger failed with status {response.status_code}")
@@ -157,10 +181,10 @@ def test_import():
 
 def main():
     """Main entry point"""
-    parser = argparse.ArgumentParser(description="Wells Production Data API Runner")
+    parser = argparse.ArgumentParser(description="Generic Data Management API Runner")
     parser.add_argument(
         "command",
-        choices=["dev", "prod", "health", "stats", "import", "test"],
+        choices=["dev", "prod", "health", "datasets", "stats", "import", "test"],
         help="Command to run"
     )
     parser.add_argument(
@@ -179,6 +203,9 @@ def main():
     elif args.command == "health":
         success = health_check()
         sys.exit(0 if success else 1)
+    elif args.command == "datasets":
+        success = test_datasets()
+        sys.exit(0 if success else 1)
     elif args.command == "stats":
         success = test_stats()
         sys.exit(0 if success else 1)
@@ -188,9 +215,10 @@ def main():
     elif args.command == "test":
         print("🧪 Running comprehensive tests...")
         health_success = health_check()
+        datasets_success = test_datasets()
         stats_success = test_stats()
         import_success = test_import()
-        overall_success = health_success and stats_success and import_success
+        overall_success = health_success and datasets_success and stats_success and import_success
         print(f"🎯 Overall test result: {'✅ PASSED' if overall_success else '❌ FAILED'}")
         sys.exit(0 if overall_success else 1)
 

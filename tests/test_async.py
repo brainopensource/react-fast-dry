@@ -15,11 +15,11 @@ def test_health():
         time.sleep(1)
 
 def test_import_trigger():
-    """Test import trigger endpoint"""
+    """Test import trigger endpoint for wells_production dataset"""
     try:
         print("Testing import trigger...")
         start = time.time()
-        resp = requests.get('http://127.0.0.1:8080/api/v1/wells/import/trigger', timeout=10)
+        resp = requests.get('http://127.0.0.1:8080/api/v1/wells_production/import/trigger', timeout=10)
         duration = time.time() - start
         print(f"Import trigger response time: {duration:.2f}s")
         print(f"Status code: {resp.status_code}")
@@ -43,15 +43,31 @@ def test_job_status(job_id):
     for i in range(5):
         try:
             start = time.time()
-            resp = requests.get(f'http://127.0.0.1:8080/api/v1/wells/import/status/{job_id}', timeout=5)
+            resp = requests.get(f'http://127.0.0.1:8080/api/v1/wells_production/import/status/{job_id}', timeout=5)
             duration = time.time() - start
             print(f"Status check {i+1}: {duration:.2f}s - {resp.json()}")
         except Exception as e:
             print(f"Status check {i+1}: ERROR - {e}")
         time.sleep(2)
 
+def test_datasets_list():
+    """Test the datasets list endpoint"""
+    try:
+        print("Testing datasets list...")
+        start = time.time()
+        resp = requests.get('http://127.0.0.1:8080/api/v1/datasets', timeout=5)
+        duration = time.time() - start
+        print(f"Datasets list response time: {duration:.2f}s")
+        print(f"Status code: {resp.status_code}")
+        print(f"Available datasets: {resp.json()}")
+    except Exception as e:
+        print(f"Datasets list ERROR: {e}")
+
 if __name__ == "__main__":
     print("=== Testing Async Behavior ===")
+    
+    # Test 0: Check available datasets
+    test_datasets_list()
     
     # Test 1: Trigger import and get job ID
     job_id = test_import_trigger()

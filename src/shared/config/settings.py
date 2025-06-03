@@ -14,7 +14,8 @@ class Settings(BaseSettings):
     
     Only sensitive OData credentials use environment variables.
     Everything else is hardcoded in settings.
-    """    # Environment
+    """
+    # Environment
     ENV: str = "development"  # Options: "development", "testing", "production"
     DEBUG: bool = True
     
@@ -23,7 +24,6 @@ class Settings(BaseSettings):
     
     # Application paths
     APP_DIR: Path = Path(__file__).parent.parent.parent.parent
-    # DATA_DIR: Path = APP_DIR / "data" # Commented out as DATA_ROOT_DIR will be used
     TEMP_DIR: Path = APP_DIR / "temp"
     SQL_DIR: Path = APP_DIR / "src" / "sql"
 
@@ -32,11 +32,12 @@ class Settings(BaseSettings):
     ODATA_USERNAME: Optional[str] = os.getenv("ODATA_USERNAME", "dev_user")
     ODATA_PASSWORD: Optional[str] = os.getenv("ODATA_PASSWORD", "dev_password")
 
-
     ODATA_TIMEOUT_SECONDS: int = 60
     ODATA_MAX_RETRIES: int = 3
     ODATA_RETRY_DELAY_SECONDS: float = 2.0
-    ODATA_MAX_RECORDS_PER_REQUEST: int = 998    # Batch Processing Configuration
+    ODATA_MAX_RECORDS_PER_REQUEST: int = 998
+
+    # Batch Processing Configuration
     BATCH_SIZE: int = 1000
     BATCH_MAX_MEMORY_MB: float = 6000.0
     BATCH_GC_THRESHOLD_MB: float = 4000.0
@@ -51,19 +52,18 @@ class Settings(BaseSettings):
     VALIDATION_MIN_PRODUCTION_VALUE: float = 0.0
     VALIDATION_MAX_PRODUCTION_VALUE: float = 999999.0
 
-    # Configurable data paths
+    # Configurable data paths (generic)
     DATA_ROOT_DIR: Path = APP_DIR / "data"
-    DUCKDB_FILENAME: str = "wells_production.duckdb"
-    CSV_EXPORT_FILENAME: str = "wells_production.csv"
+    DUCKDB_FILENAME: str = "generic_data.duckdb"
+    CSV_EXPORT_FILENAME: str = "data_export.csv"
     
     # Database
     DB_PATH: Path = DATA_ROOT_DIR / DUCKDB_FILENAME
-    WELLS_SQL_PATH: Path = SQL_DIR / "wells.sql"
     
-    # Export paths
-    WELLS_EXPORT_PATH: Path = DATA_ROOT_DIR / CSV_EXPORT_FILENAME
     # Mocked response path
-    MOCKED_RESPONSE_PATH: Path = APP_DIR / "external" / "mocked_response.json"    # CORS settings
+    MOCKED_RESPONSE_PATH: Path = APP_DIR / "external" / "mocked_response.json"
+
+    # CORS settings
     CORS_ALLOWED_ORIGINS: list[str] = ["*"]  # Allow all origins for development, configure for production
     
     # Server Configuration
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     TEMP_DIR_NAME: str = "temp"
     
     # Log File Configuration
-    LOG_FILENAME: str = "wells_api.log"
+    LOG_FILENAME: str = "generic_api.log"
     LOG_LEVEL: str = "INFO"
     
     # DuckDB Export Configuration
@@ -90,12 +90,12 @@ class Settings(BaseSettings):
     DUCKDB_EXPORT_THREADS: int = 4
     
     # Default Filenames
-    DEFAULT_CSV_FILENAME: str = "wells_prod.csv"
+    DEFAULT_CSV_FILENAME: str = "data_export.csv"
     
     # Application Information
-    API_TITLE: str = "Well Production API"
-    API_DESCRIPTION: str = "High-performance API for managing millions of well production records using DuckDB with on-demand CSV export"
-    API_VERSION: str = "1.0.0"
+    API_TITLE: str = "Generic Data Management API"
+    API_DESCRIPTION: str = "High-performance API for managing multiple datasets using DuckDB with configuration-driven architecture"
+    API_VERSION: str = "2.0.0"
     
     class Config:
         env_prefix = "APP_"
@@ -103,7 +103,6 @@ class Settings(BaseSettings):
 
     def setup_directories(self):
         """Create necessary directories if they don't exist."""
-        # Ensure DATA_ROOT_DIR is created, TEMP_DIR can remain if used by other parts or be removed if not
         for path in [self.DATA_ROOT_DIR, self.TEMP_DIR]:
             path.mkdir(parents=True, exist_ok=True)
 

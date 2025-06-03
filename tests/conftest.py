@@ -1,5 +1,5 @@
 """
-Pytest configuration and shared fixtures for the Well Production API tests.
+Pytest configuration and shared fixtures for the Generic Data Management API tests.
 """
 
 import pytest
@@ -38,11 +38,11 @@ def api_endpoints():
     return {
         "health": "/health",
         "root": "/",
-        "import": "/api/v1/wells/import",
-        "download": "/api/v1/wells/download", 
-        "stats": "/api/v1/wells/stats",
-        "well": "/api/v1/wells/well",
-        "field": "/api/v1/wells/field"
+        "datasets": "/api/v1/datasets",
+        "wells_production_import": "/api/v1/wells_production/import",
+        "wells_production_export": "/api/v1/wells_production/export", 
+        "wells_production_stats": "/api/v1/wells_production/stats",
+        "wells_production_list": "/api/v1/wells_production/"
     }
 
 
@@ -68,6 +68,12 @@ def expected_well_reference():
 def expected_field_name():
     """Expected field name for test validation."""
     return "Candeias"
+
+
+@pytest.fixture
+def sample_dataset_name():
+    """Sample dataset name for testing."""
+    return "wells_production"
 
 
 class TestAssertions:
