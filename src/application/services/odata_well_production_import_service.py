@@ -18,6 +18,7 @@ from ...shared.exceptions import (
 )
 from ...shared.job_manager import JobManager
 from ...shared.utils.timing_decorator import async_timed, timed
+from ...shared.schema import WellProductionSchema
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +155,8 @@ class ODataWellProductionImportService:
 
     def _apply_field_name_mapping(self, dataframe: pl.DataFrame) -> pl.DataFrame:
         """Apply field name mapping to align with domain entity structure."""
-        field_mapping = FieldMapping()
-        actual_rename_map = field_mapping.get_applicable_mappings(dataframe.columns)
+        field_mapping = WellProductionSchema.get_field_mapping()
+        actual_rename_map = {k: v for k, v in field_mapping.items() if k in dataframe.columns}
         
         if actual_rename_map:
             return dataframe.rename(actual_rename_map)
@@ -337,32 +338,6 @@ class InsertionResult:
     def __init__(self, new_records: int, duplicate_records: int):
         self.new_records = new_records
         self.duplicate_records = duplicate_records
-
-
-class FieldMapping:
-    """Handles field name mapping from external API to domain entity."""
-    
-    def __init__(self):
-        self._mapping = {
-            "_field_name": "field_name",
-            "_well_reference": "well_reference",
-            "field_code": "field_code",
-            "well_code": "well_code",
-            "well_name": "well_name",
-            "production_period": "production_period",
-            "days_on_production": "days_on_production",
-            "oil_production_kbd": "oil_production_kbd",
-            "gas_production_mmcfd": "gas_production_mmcfd",
-            "liquids_production_kbd": "liquids_production_kbd",
-            "water_production_kbd": "water_production_kbd",
-            "data_source": "data_source",
-            "source_data": "source_data",
-            "partition_0": "partition_0"
-        }
-
-    def get_applicable_mappings(self, columns: List[str]) -> Dict[str, str]:
-        """Get mappings that are applicable to the given columns."""
-        return {k: v for k, v in self._mapping.items() if k in columns}
 
 
 class TargetSchema:

@@ -3,13 +3,15 @@ Mappers for converting between domain entities and API schemas.
 This follows the hexagonal architecture pattern by keeping the domain layer
 separate from the API layer while providing clean conversion utilities.
 """
-from typing import List
+from typing import List, Optional
+from datetime import datetime
+
 from ...domain.entities.well_production import WellProduction as WellProductionEntity
-from .schemas import (
-    WellProductionSchema,
-    WellProductionCreateSchema,
-    WellProductionUpdateSchema,
-    WellProductionStatsSchema
+from ...shared.schema import (
+    WellProductionResponse,
+    WellProductionCreate,
+    WellProductionUpdate,
+    WellProductionListResponse
 )
 
 
@@ -17,34 +19,28 @@ class WellProductionMapper:
     """Mapper for converting between WellProduction domain entity and API schemas."""
     
     @staticmethod
-    def entity_to_schema(entity: WellProductionEntity) -> WellProductionSchema:
-        """Convert domain entity to API schema."""
-        return WellProductionSchema(
-            field_code=entity.field_code,
-            field_name=entity.field_name,
-            well_code=entity.well_code,
-            well_reference=entity.well_reference,
-            well_name=entity.well_name,
-            production_period=entity.production_period,
-            days_on_production=entity.days_on_production,
-            oil_production_kbd=entity.oil_production_kbd,
-            gas_production_mmcfd=entity.gas_production_mmcfd,
-            liquids_production_kbd=entity.liquids_production_kbd,
-            water_production_kbd=entity.water_production_kbd,
-            data_source=entity.data_source,
-            source_data=entity.source_data,
-            partition_0=entity.partition_0,
-            created_at=entity.created_at,
-            updated_at=entity.updated_at
+    def entity_to_response(entity: WellProductionEntity) -> WellProductionResponse:
+        """Convert domain entity to API response schema."""
+        return WellProductionResponse.model_validate(entity.model_dump())
+    
+    @staticmethod
+    def entity_list_to_response(
+        entities: List[WellProductionEntity],
+        total: int,
+        page: int,
+        size: int
+    ) -> WellProductionListResponse:
+        """Convert list of domain entities to paginated API response."""
+        return WellProductionListResponse(
+            items=[WellProductionMapper.entity_to_response(e) for e in entities],
+            total=total,
+            page=page,
+            size=size,
+            pages=(total + size - 1) // size
         )
     
     @staticmethod
-    def entities_to_schemas(entities: List[WellProductionEntity]) -> List[WellProductionSchema]:
-        """Convert list of domain entities to list of API schemas."""
-        return [WellProductionMapper.entity_to_schema(entity) for entity in entities]
-    
-    @staticmethod
-    def create_schema_to_entity(schema: WellProductionCreateSchema) -> WellProductionEntity:
+    def create_schema_to_entity(schema: WellProductionCreate) -> WellProductionEntity:
         """Convert create schema to domain entity."""
         return WellProductionEntity(
             field_code=schema.field_code,
@@ -68,7 +64,7 @@ class WellProductionMapper:
     @staticmethod
     def update_entity_from_schema(
         entity: WellProductionEntity, 
-        schema: WellProductionUpdateSchema
+        schema: WellProductionUpdate
     ) -> WellProductionEntity:
         """Update domain entity with values from update schema."""
         # Create a new entity with updated values (immutable approach)

@@ -38,11 +38,7 @@ def api_endpoints():
     return {
         "health": "/health",
         "root": "/",
-        "import": "/api/v1/wells/import",
-        "download": "/api/v1/wells/download", 
-        "stats": "/api/v1/wells/stats",
-        "well": "/api/v1/wells/well",
-        "field": "/api/v1/wells/field"
+        "well": "/api/v1/wells/well"
     }
 
 

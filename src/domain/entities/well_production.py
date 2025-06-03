@@ -1,31 +1,35 @@
 from datetime import datetime
-from dataclasses import dataclass
 from typing import Optional
+from pydantic import BaseModel, Field
 
-@dataclass
-class WellProduction:
-    """Domain entity representing well production data."""
-    field_code: int
-    field_name: str
-    well_code: int
-    well_reference: str
-    well_name: str
-    production_period: str
-    days_on_production: int
-    oil_production_kbd: float
-    gas_production_mmcfd: float
-    liquids_production_kbd: float
-    water_production_kbd: float
-    data_source: str
-    source_data: str
-    partition_0: str
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+class WellProduction(BaseModel):
+    """Domain entity for well production data"""
+    field_code: int = Field(description="Unique identifier for the field")
+    field_name: str = Field(description="Name of the field")
+    well_code: int = Field(description="Unique identifier for the well")
+    well_reference: str = Field(description="Reference code for the well")
+    well_name: str = Field(description="Name of the well")
+    production_period: str = Field(description="Production period identifier")
+    days_on_production: int = Field(description="Number of days the well was on production")
+    oil_production_kbd: Optional[float] = Field(None, description="Oil production in thousand barrels per day")
+    gas_production_mmcfd: Optional[float] = Field(None, description="Gas production in million cubic feet per day")
+    liquids_production_kbd: Optional[float] = Field(None, description="Liquids production in thousand barrels per day")
+    water_production_kbd: Optional[float] = Field(None, description="Water production in thousand barrels per day")
+    data_source: Optional[str] = Field(None, description="Source of the production data")
+    source_data: Optional[str] = Field(None, description="Raw source data in JSON format")
+    partition_0: Optional[str] = Field(None, description="Partition key for data organization")
+    created_at: Optional[datetime] = Field(None, description="Timestamp of record creation")
+    updated_at: Optional[datetime] = Field(None, description="Timestamp of last record update")
 
-    def calculate_total_production(self) -> float:
-        """Calculate total production in KBD."""
-        return self.oil_production_kbd + self.liquids_production_kbd + self.water_production_kbd
+    def get_primary_key(self) -> tuple:
+        """Get the primary key components"""
+        return (self.well_code, self.field_code, self.production_period)
 
-    def is_producing(self) -> bool:
-        """Check if the well is currently producing."""
-        return self.days_on_production > 0 
+    def to_dict(self) -> dict:
+        """Convert entity to dictionary"""
+        return self.model_dump()
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'WellProduction':
+        """Create entity from dictionary"""
+        return cls.model_validate(data)

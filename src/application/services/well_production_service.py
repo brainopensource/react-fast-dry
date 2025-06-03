@@ -6,11 +6,9 @@ from typing import List, Dict, Any
 
 from ...domain.entities.well_production import WellProduction
 from ...domain.repositories.well_production_repository import WellProductionRepository as WellProductionRepositoryPort
-# Unused imports removed: ExternalApiPort, BatchProcessor, BatchConfig, ResponseBuilder, BatchResult, datetime, Optional, asdict
 from ...shared.exceptions import (
     ValidationException, 
     BusinessRuleViolationException,
-    # ApplicationException - Re-evaluate if needed for validate_data_quality's own errors
 )
 
 logger = logging.getLogger(__name__)
@@ -27,8 +25,6 @@ class WellProductionService:
         repository: WellProductionRepositoryPort
     ):
         self.repository = repository
-        # external_api and batch_processor removed
-        # _import_stats removed
     
     async def validate_data_quality(
         self,

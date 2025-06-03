@@ -21,18 +21,20 @@ logger = logging.getLogger(__name__)
 
 class WellProductionImportService:
     """
-    Service for importing well production data.
-    Handles fetching, validation, and batch insertion of data.
+    Service for importing well production data from external sources.
+    Handles data validation, transformation, and storage.
     """
 
     def __init__(
         self,
-        external_api: ExternalApiAdapter,
         repository: WellProductionRepository,
+        external_api: ExternalApiPort,
+        batch_processor: BatchProcessor,
         job_manager: JobManager
     ):
-        self.external_api = external_api
         self.repository = repository
+        self.external_api = external_api
+        self.batch_processor = batch_processor
         self.job_manager = job_manager
         # Track import statistics across batches
         # These stats are reset per call to import_production_data, which is correct.
@@ -188,9 +190,7 @@ class WellProductionImportService:
         production_df: pl.DataFrame 
     ) -> Tuple[pl.DataFrame, List[Dict[str, Any]]]: 
         """
-        Validate production data using Polars DataFrame for efficiency.
-        Performs schema mapping, type casting, and rule-based validation.
-        Returns a DataFrame with valid rows and a list of dictionaries detailing errors.
+        Validates production data DataFrame and returns cleaned data with validation errors.
         """
         if production_df.is_empty():
             return production_df, []
@@ -203,9 +203,9 @@ class WellProductionImportService:
         rename_map = {
             # Direct mappings for fields that already match
             "field_code": "field_code",
-            "_field_name": "field_name",  # Fix: underscore prefix in source
+            "field_name": "field_name",
             "well_code": "well_code", 
-            "_well_reference": "well_reference",  # Fix: underscore prefix in source
+            "well_reference": "well_reference",
             "well_name": "well_name",
             "production_period": "production_period",
             "days_on_production": "days_on_production",
@@ -216,23 +216,8 @@ class WellProductionImportService:
             "data_source": "data_source",
             "source_data": "source_data", 
             "partition_0": "partition_0",
-            # Legacy Pascal case mappings (in case data format changes)
-            "FieldCode": "field_code",
-            "FieldName": "field_name",
-            "WellCode": "well_code",
-            "WellReference": "well_reference",
-            "WellName": "well_name",
-            "ProductionPeriod": "production_period",
-            "DaysOnProduction": "days_on_production",
-            "OilProductionKBD": "oil_production_kbd",
-            "GasProductionMMCFD": "gas_production_mmcfd",
-            "LiquidsProductionKBD": "liquids_production_kbd",
-            "WaterProductionKBD": "water_production_kbd",
-            "DataSource": "data_source",
-            "SourceData": "source_data", 
-            "Partition0": "partition_0",
-            "createdAt": "created_at", 
-            "updatedAt": "updated_at"
+            "created_at": "created_at",
+            "updated_at": "updated_at"
         }
         actual_rename_map = {k: v for k, v in rename_map.items() if k in df_to_validate.columns}
         if actual_rename_map:
@@ -325,23 +310,3 @@ class WellProductionImportService:
 
         logger.info(f"Polars validation: Input rows: {production_df.height}, Valid rows: {df_validated.height}, Errors: {len(errors)}")
         return df_validated, errors
-
-    # Removed: _create_well_production_entities_from_df - this is now part of validation/transformation to Polars DF
-
-    # Removed: _get_default_batch_config - BatchProcessor is not used in this simplified flow
-
-    # Removed: _run_batch_processor - BatchProcessor is not used in this simplified flow
-
-# Removing the unused _import_stats attribute from __init__ if it's fully managed within import_production_data
-# Also removing BatchProcessor from __init__ if unused.
-
-# The old _validate_production_data and _insert_batch methods are effectively replaced or unused.
-# The edit tool will handle removal if the new content fully replaces the old methods' lines.
-# If the old methods are not fully covered by the diff, they might need explicit deletion.
-# The provided diff implies replacement of import_production_data and addition of _validate_production_data_df.
-# The unused methods _validate_production_data (original) and _insert_batch should be manually checked for removal if not overwritten by the tool.
-
-# For the purpose of this edit, I am focusing on replacing `import_production_data` and adding the new validation method.
-# The original `_validate_production_data` and `_insert_batch` are implicitly removed by not being included in the new version of the file content that this edit would generate if it replaced the whole file.
-# If the edit tool does line-by-line patching, those methods would remain unless explicitly targeted for deletion.
-# Assuming this edit is comprehensive for the service logic.

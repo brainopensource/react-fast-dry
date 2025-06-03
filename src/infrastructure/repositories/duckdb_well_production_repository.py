@@ -11,6 +11,7 @@ from ...domain.repositories.well_production_repository import WellProductionRepo
 from ...shared.utils.sql_loader import load_sql
 from ...shared.utils.timing_decorator import async_timed, timed
 from ...shared.config.settings import get_settings
+from ...shared.schema import WellProductionSchema
 
 class DuckDBWellProductionRepository(WellProductionRepository):
     """DuckDB implementation of the well production repository with on-demand CSV export."""
@@ -25,14 +26,9 @@ class DuckDBWellProductionRepository(WellProductionRepository):
         # Get settings for default values
         settings = get_settings()
         
-        # Use settings defaults if not provided
-        self.db_path = db_path if db_path is not None else settings.DB_PATH
-        self.db_path.parent.mkdir(exist_ok=True)
-        
-        # CSV export configuration from settings
-        self.downloads_dir = downloads_dir if downloads_dir is not None else Path(settings.DOWNLOADS_DIR_NAME)
-        self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        self.csv_path = self.downloads_dir / (csv_filename if csv_filename is not None else settings.DEFAULT_CSV_FILENAME)
+        self.db_path = db_path or settings.DATABASE_PATH
+        self.downloads_dir = downloads_dir or settings.DOWNLOADS_DIR
+        self.csv_filename = csv_filename or settings.DEFAULT_CSV_FILENAME
         
         # DuckDB export configuration from settings
         self.BATCH_SIZE = settings.DUCKDB_EXPORT_BATCH_SIZE
@@ -46,25 +42,29 @@ class DuckDBWellProductionRepository(WellProductionRepository):
             sql_path = Path(__file__).parent.parent / "operations" / "wells.sql"
         self.queries = load_sql(str(sql_path))
         
+        # Initialize database
         self._initialize_database()
     
     def _initialize_database(self):
         """Initialize the DuckDB database and create the table if it doesn't exist."""
         with duckdb.connect(str(self.db_path)) as conn:
-            # Create table
-            conn.execute(self.queries['create_table'])
+            # Create table using schema
+            conn.execute(WellProductionSchema.get_sql_create_table())
             
-            # Create indexes
-            conn.execute(self.queries['create_indexes'])
+            # Create indexes using schema
+            for index_sql in WellProductionSchema.get_sql_indexes():
+                conn.execute(index_sql)
     
     async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code."""
         def _get_by_well_code_sync():
             with duckdb.connect(str(self.db_path)) as conn:
-                results = conn.execute(
-                    self.queries['get_by_well_code'],
-                    [well_code]
-                ).fetchall()
+                query = f"""
+                SELECT * FROM well_production 
+                WHERE well_code = ? 
+                ORDER BY production_period DESC
+                """
+                results = conn.execute(query, [well_code]).fetchall()
                 return [self._row_to_entity(row) for row in results]
         
         return await asyncio.to_thread(_get_by_well_code_sync)
@@ -73,10 +73,11 @@ class DuckDBWellProductionRepository(WellProductionRepository):
         """Get all well production data for a field."""
         def _get_by_field_code_sync():
             with duckdb.connect(str(self.db_path)) as conn:
-                results = conn.execute(
-                    self.queries['get_by_field_code'],
-                    [field_code]
-                ).fetchall()
+                query = f"""
+                SELECT * FROM well_production 
+                WHERE field_code = ?
+                """
+                results = conn.execute(query, [field_code]).fetchall()
                 return [self._row_to_entity(row) for row in results]
         
         return await asyncio.to_thread(_get_by_field_code_sync)
@@ -85,10 +86,14 @@ class DuckDBWellProductionRepository(WellProductionRepository):
         """Save well production data."""
         def _save_sync():
             with duckdb.connect(str(self.db_path)) as conn:
-                conn.execute(
-                    self.queries['insert_single'], 
-                    self._entity_to_params(well_production)
-                )
+                columns = WellProductionSchema.get_column_names()
+                placeholders = ", ".join(["?" for _ in columns])
+                query = f"""
+                INSERT OR REPLACE INTO well_production 
+                ({', '.join(columns)}) 
+                VALUES ({placeholders})
+                """
+                conn.execute(query, self._entity_to_params(well_production))
             return well_production
         
         return await asyncio.to_thread(_save_sync)
@@ -155,14 +160,45 @@ class DuckDBWellProductionRepository(WellProductionRepository):
         return [], new_records_count, duplicate_count
     
     @async_timed
-    async def bulk_insert(self, incoming_df: pl.DataFrame) -> Tuple[List[WellProduction], int, int]:
-        """
-        Bulk insert well production data with duplicate detection from a Polars DataFrame.
+    async def bulk_insert(self, well_productions: List[WellProduction]) -> Tuple[List[WellProduction], int, int]:
+        """Bulk insert well production data with duplicate detection."""
+        def _bulk_insert_sync():
+            with duckdb.connect(str(self.db_path)) as conn:
+                # Get existing records
+                pk_columns = WellProductionSchema.get_primary_key_columns()
+                pk_values = [(wp.well_code, wp.field_code, wp.production_period) for wp in well_productions]
+                
+                existing_query = f"""
+                SELECT {', '.join(pk_columns)} 
+                FROM well_production 
+                WHERE ({', '.join(pk_columns)}) IN (VALUES {', '.join(['(?, ?, ?)' for _ in pk_values])})
+                """
+                existing_records = set(conn.execute(existing_query, [v for t in pk_values for v in t]).fetchall())
+                
+                # Filter out duplicates
+                new_records = []
+                duplicate_count = 0
+                for wp in well_productions:
+                    if (wp.well_code, wp.field_code, wp.production_period) in existing_records:
+                        duplicate_count += 1
+                    else:
+                        new_records.append(wp)
+                
+                # Insert new records
+                if new_records:
+                    columns = WellProductionSchema.get_column_names()
+                    placeholders = ", ".join(["?" for _ in columns])
+                    insert_query = f"""
+                    INSERT INTO well_production 
+                    ({', '.join(columns)}) 
+                    VALUES ({placeholders})
+                    """
+                    for wp in new_records:
+                        conn.execute(insert_query, self._entity_to_params(wp))
+                
+                return new_records, len(new_records), duplicate_count
         
-        Returns:
-            Tuple of (inserted_records, new_records_count, duplicate_records_count)
-        """
-        return await asyncio.to_thread(self._bulk_insert_sync, incoming_df)
+        return await asyncio.to_thread(_bulk_insert_sync)
     
     async def get_all(self) -> List[WellProduction]:
         """Get all well production data."""
@@ -184,44 +220,12 @@ class DuckDBWellProductionRepository(WellProductionRepository):
     
     def _entity_to_params(self, well_production: WellProduction) -> list:
         """Convert a WellProduction entity to a list of parameters for SQL queries."""
-        return [
-            well_production.field_code,
-            well_production.field_name,
-            well_production.well_code,
-            well_production.well_reference,
-            well_production.well_name,
-            well_production.production_period,
-            well_production.days_on_production,
-            well_production.oil_production_kbd,
-            well_production.gas_production_mmcfd,
-            well_production.liquids_production_kbd,
-            well_production.water_production_kbd,
-            well_production.data_source,
-            well_production.source_data,
-            well_production.partition_0,
-            well_production.created_at,
-            well_production.updated_at
-        ]
+        return [getattr(well_production, col) for col in WellProductionSchema.get_column_names()]
     
-    def _row_to_entity(self, row: tuple) -> WellProduction:
+    def _row_to_entity(self, row: dict) -> WellProduction:
         """Convert a database row to a WellProduction entity."""
         return WellProduction(
-            field_code=row[0],
-            field_name=row[1],
-            well_code=row[2],
-            well_reference=row[3],
-            well_name=row[4],
-            production_period=row[5],
-            days_on_production=row[6],
-            oil_production_kbd=row[7],
-            gas_production_mmcfd=row[8],
-            liquids_production_kbd=row[9],
-            water_production_kbd=row[10],
-            data_source=row[11],
-            source_data=row[12],
-            partition_0=row[13],
-            created_at=row[14],
-            updated_at=row[15]
+            **{col: row[col] for col in WellProductionSchema.get_column_names()}
         )
 
     @timed
@@ -261,7 +265,7 @@ class DuckDBWellProductionRepository(WellProductionRepository):
                             updated_at::VARCHAR as updated_at
                         FROM well_production
                         ORDER BY well_code, field_code, production_period
-                    ) TO '{self.csv_path}' (
+                    ) TO '{self.csv_filename}' (
                         HEADER, 
                         DELIMITER ',',
                         QUOTE '"',
@@ -273,7 +277,7 @@ class DuckDBWellProductionRepository(WellProductionRepository):
             else:
                 # For larger datasets, use parallel export with temporary files
                 # First, write headers
-                with open(self.csv_path, 'w', newline='', encoding='utf-8') as f:
+                with open(self.csv_filename, 'w', newline='', encoding='utf-8') as f:
                     writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
                     writer.writeheader()
                 
@@ -320,7 +324,7 @@ class DuckDBWellProductionRepository(WellProductionRepository):
                     """)
                 
                 # Combine temporary files into final CSV
-                with open(self.csv_path, 'ab') as outfile:
+                with open(self.csv_filename, 'ab') as outfile:
                     for temp_file in temp_files:
                         with open(temp_file, 'rb') as infile:
                             outfile.write(infile.read())
@@ -328,7 +332,7 @@ class DuckDBWellProductionRepository(WellProductionRepository):
                         temp_file.unlink()
             
             conn.close()
-            return self.csv_path
+            return self.csv_filename
             
         except Exception as e:
             # Clean up any temporary files in case of error
@@ -348,7 +352,7 @@ class DuckDBWellProductionRepository(WellProductionRepository):
             # Fallback to the old method if DuckDB export fails
             well_productions = await self.get_all()
             await self._bulk_save_to_csv(well_productions, overwrite=True)
-            return self.csv_path
+            return self.csv_filename
 
     def _get_fieldnames(self) -> List[str]:
         """Get CSV fieldnames in the correct order."""
@@ -383,9 +387,9 @@ class DuckDBWellProductionRepository(WellProductionRepository):
     async def _bulk_save_to_csv(self, well_productions: List[WellProduction], overwrite: bool = False) -> None:
         """Fallback method to save data to CSV using Python (slower but more reliable)."""
         mode = 'w' if overwrite else 'a'
-        file_exists = self.csv_path.exists()
+        file_exists = self.csv_filename.exists()
         
-        with open(self.csv_path, mode, newline='', encoding='utf-8') as f:
+        with open(self.csv_filename, mode, newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=self._get_fieldnames())
             
             # Write header if file is new or we're overwriting

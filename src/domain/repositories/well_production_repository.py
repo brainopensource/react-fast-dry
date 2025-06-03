@@ -9,12 +9,7 @@ class WellProductionRepository(ABC):
     async def get_by_well_code(self, well_code: int) -> List[WellProduction]:
         """Get well production data by well code."""
         pass
-    
-    @abstractmethod
-    async def get_by_field_code(self, field_code: int) -> List[WellProduction]:
-        """Get all well production data for a field."""
-        pass
-    
+   
     @abstractmethod
     async def save(self, well_production: WellProduction) -> WellProduction:
         """Save well production data."""

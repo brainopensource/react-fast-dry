@@ -13,13 +13,14 @@ import polars as pl
 
 from ...domain.ports.external_api_port import ExternalApiPort
 from ...domain.entities.well_production import WellProduction
-from ...shared.config.settings import get_settings # Added import
+from ...shared.config.settings import get_settings
+from ...shared.schema import WellProductionSchema
 from ...shared.exceptions import (
     ExternalApiException, 
     FileSystemException,
     ValidationException
 )
-from ...shared.utils.timing_decorator import async_timed # Added import
+from ...shared.utils.timing_decorator import async_timed
 
 logger = logging.getLogger(__name__)
 
@@ -32,24 +33,24 @@ class ExternalApiAdapter(ExternalApiPort):
     """
     def __init__(
         self,
-        base_url: Optional[str] = None,
+        base_url: str,
         api_key: Optional[str] = None,
-        mock_mode: bool = True,
+        mock_mode: bool = False,
         mock_file_path: Optional[str] = None,
-        timeout_seconds: Optional[int] = None,
-        max_retries: Optional[int] = None,
-        retry_delay_seconds: Optional[float] = None
-        ):
-        # Get settings for default values
-        settings = get_settings()
-        
+        timeout_seconds: int = 30,
+        max_retries: int = 3,
+        retry_delay_seconds: float = 1.0
+    ):
         self.base_url = base_url
         self.api_key = api_key
         self.mock_mode = mock_mode
-        self.mock_file_path = Path(mock_file_path) if mock_file_path else settings.MOCKED_RESPONSE_PATH
-        self.timeout_seconds = timeout_seconds if timeout_seconds is not None else settings.EXTERNAL_API_TIMEOUT_SECONDS
-        self.max_retries = max_retries if max_retries is not None else settings.EXTERNAL_API_MAX_RETRIES
-        self.retry_delay_seconds = retry_delay_seconds if retry_delay_seconds is not None else settings.EXTERNAL_API_RETRY_DELAY_SECONDS
+        self.mock_file_path = mock_file_path
+        self.timeout_seconds = timeout_seconds
+        self.max_retries = max_retries
+        self.retry_delay_seconds = retry_delay_seconds
+        
+        # Use centralized schema for field mapping
+        self.field_mapping = WellProductionSchema.get_field_mapping()
         
         # Validate configuration
         if not mock_mode and not base_url:
