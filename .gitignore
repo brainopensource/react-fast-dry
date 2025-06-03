@@ -26,9 +26,8 @@ MANIFEST
 .idea/
 *.swp
 *.swo
+.cursorignore
 
-# Temporary files
-frontend/front_dev_plan.md
 
 # Database
 data/db.duckdb
@@ -42,6 +41,7 @@ downloads/*
 
 # Temporary files
 temp/*.csv
+frontend/front_dev_plan.md
 
 # Environment
 .env
